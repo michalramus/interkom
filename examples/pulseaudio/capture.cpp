@@ -1,7 +1,7 @@
 // PulseAudio async capture: records mono 48 kHz S16LE to a raw file.
 //
 // Play back with:
-//   ffplay -f s16le -ar 48000 -ac 1 capture.raw
+//   ffplay -f s16le -ar 48000 -ch_layout mono capture.raw
 
 #include <atomic>
 #include <chrono>

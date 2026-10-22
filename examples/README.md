@@ -45,7 +45,16 @@ Capture defaults to `capture.raw` when no path is given. Inspect a recording
 with:
 
 ```sh
-ffplay -f s16le -ar 48000 -ac 1 out.raw
+ffplay -f s16le -ar 48000 -ch_layout mono out.raw
+```
+
+Raw PCM carries no header, so those flags *are* the format description — get
+them wrong and the file still plays, just at the wrong speed. Note `-ch_layout`
+rather than `-ac`: ffplay only exposes the demuxer's own options, and `-ac` was
+removed in ffmpeg 9. Convert to a self-describing file with:
+
+```sh
+ffmpeg -f s16le -ar 48000 -ch_layout mono -i out.raw out.wav
 ```
 
 ### Notes

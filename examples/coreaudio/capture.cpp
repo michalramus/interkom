@@ -4,7 +4,7 @@
 // first run (grant it to the terminal app, not the binary).
 //
 // Play back with:
-//   ffplay -f s16le -ar 48000 -ac 1 capture.raw
+//   ffplay -f s16le -ar 48000 -ch_layout mono capture.raw
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
