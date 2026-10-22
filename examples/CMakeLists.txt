@@ -26,3 +26,18 @@ if(TARGET PkgConfig::PULSE)
 else()
     message(STATUS "examples: libpulse not found, skipping PulseAudio examples")
 endif()
+
+if(APPLE)
+    interkom_add_example(example_coreaudio_capture coreaudio/capture.cpp)
+    interkom_add_example(example_coreaudio_playback coreaudio/playback.cpp)
+    foreach(target example_coreaudio_capture example_coreaudio_playback)
+        target_link_libraries(${target} PRIVATE
+            "-framework AudioToolbox"
+            "-framework AudioUnit"
+            "-framework CoreAudio"
+            "-framework CoreFoundation"
+        )
+    endforeach()
+else()
+    message(STATUS "examples: not Apple, skipping CoreAudio examples")
+endif()
