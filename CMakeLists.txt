@@ -26,3 +26,9 @@ target_compile_options(interkom PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
+
+option(INTERKOM_BUILD_EXAMPLES "Build backend examples" ON)
+
+if(INTERKOM_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
