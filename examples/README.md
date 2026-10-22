@@ -57,6 +57,9 @@ removed in ffmpeg 9. Convert to a self-describing file with:
 ffmpeg -f s16le -ar 48000 -ch_layout mono -i out.raw out.wav
 ```
 
+See [LOW_LATENCY.md](LOW_LATENCY.md) for the tuning knobs these examples
+deliberately leave alone, and why the PulseAudio one currently runs at 260 ms.
+
 ### Notes
 
 - **macOS microphone permission.** A plain CLI binary has no bundle, so the TCC
