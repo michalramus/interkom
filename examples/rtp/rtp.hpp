@@ -63,6 +63,12 @@ constexpr std::uint32_t kSendQueuePackets = 8;
 // of concealing 100 ms of silence.
 constexpr std::uint32_t kMaxConcealPackets = 8;
 
+// How much the receive queue holds. Far more than the latency target on
+// purpose: pull() trims the depth back down on every callback, so the only job
+// left for capacity is absorbing a burst that lands between two callbacks.
+// Overflowing it loses audio outright, which trimming does not.
+constexpr std::uint32_t kReceiveQueuePackets = 50;
+
 // How long a worker blocks before rechecking whether it was asked to stop.
 constexpr std::chrono::milliseconds kStopPollInterval{100};
 
@@ -354,7 +360,8 @@ class Receiver {
         : target_(jitter_packets * kFramesPerPacket),
           // Headroom above the target absorbs a burst; pull() trims back down
           // to the target so latency cannot creep upwards.
-          limit_((jitter_packets + 4) * kFramesPerPacket), ring_(limit_ + kFramesPerPacket) {
+          limit_((jitter_packets + 4) * kFramesPerPacket),
+          ring_(kReceiveQueuePackets * kFramesPerPacket) {
         socket_ = ::socket(AF_INET, SOCK_DGRAM, 0);
         if (socket_ < 0) {
             error_ = "socket";
@@ -460,10 +467,12 @@ class Receiver {
     std::size_t drain(std::int16_t* out, std::size_t frames) {
         const std::size_t queued = ring_.size();
 
-        if (queued > limit_) {
+        if (queued > limit_ + frames) {
             // The sender's clock runs faster than ours, or a burst landed.
-            // Give up the excess audio rather than the latency.
-            ring_.discard(queued - target_);
+            // Give up the excess audio rather than the latency. Trim to one
+            // request above the target, so the pop below leaves exactly the
+            // target behind -- the same depth the priming path settles on.
+            ring_.discard(queued - (target_ + frames));
             overruns_.fetch_add(1, std::memory_order_relaxed);
         }
 
