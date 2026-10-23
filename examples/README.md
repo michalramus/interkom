@@ -15,6 +15,9 @@ and writes.
 | `rtp/pulseaudio_recv.cpp` | `libpulse` + `rtp/rtp.hpp` | RTP → speakers |
 | `rtp/coreaudio_send.cpp` | AUHAL + `rtp/rtp.hpp` | mic → RTP |
 | `rtp/coreaudio_recv.cpp` | AUHAL + `rtp/rtp.hpp` | RTP → speakers |
+| `rtp/uvgrtp_send.cpp` | uvgRTP | sine → RTP |
+| `rtp/uvgrtp_recv.cpp` | uvgRTP | RTP → counters |
+| `rtp/uvgrtp_coreaudio_recv.cpp` | uvgRTP + AUHAL | RTP → jitter buffer → speakers |
 
 All of them use mono 48 kHz. The four file-based examples write and read signed
 16-bit little-endian; the two playback examples generate at 0.25 amplitude so
@@ -152,6 +155,100 @@ ffplay -protocol_whitelist file,rtp,udp -i examples/rtp/l16.sdp &
 
 `rtp/l16.sdp` describes the stream for tools that need one; ffplay cannot infer
 a dynamic payload type on its own.
+
+## uvgRTP
+
+Three examples using [uvgRTP](https://ultravideo.fi/uvgrtp.html) instead of a
+hand-rolled socket, to see what a library buys.
+
+`uvgrtp_send.cpp` and `uvgrtp_recv.cpp` are deliberately the *minimum*: no audio
+device, no buffering, just the least code that puts an L16 frame on the wire and
+takes one off again. Sending is four calls:
+
+```cpp
+uvgrtp::context ctx;
+uvgrtp::session* session = ctx.create_session("127.0.0.1");
+uvgrtp::media_stream* stream = session->create_stream(5004, RTP_FORMAT_L16_MONO, RCE_SEND_ONLY);
+stream->configure_ctx(RCC_CLOCK_RATE, 48000);
+stream->push_frame(payload, 960, RTP_NO_FLAGS);
+```
+
+Receiving is the same, with `RCE_RECEIVE_ONLY` and a hook:
+
+```cpp
+stream->install_receive_hook(nullptr, on_frame);
+// void on_frame(void*, uvgrtp::frame::rtp_frame* f)
+//   f->payload, f->payload_len, f->header.seq ... then dealloc_frame(f)
+```
+
+Two details that are not obvious. `RTP_FORMAT_L16_MONO` is RFC 3551 payload
+type 11, whose clock rate is fixed at 44.1 kHz — without `RCC_CLOCK_RATE` the
+timestamps are wrong for a 48 kHz stream. And uvgRTP does not byte-swap: L16 is
+big-endian on the wire and the payload is passed through as given.
+
+`uvgrtp_coreaudio_recv.cpp` is the realistic one: uvgRTP's receive hook, a jitter
+buffer, and AUHAL playback in one file.
+
+### uvgRTP has no jitter buffer, and that is normal
+
+The only `jitter` in the whole uvgRTP source is the RTCP report *field* — the
+interarrival jitter a receiver measures and reports. `RCC_RING_BUFFER_SIZE` is a
+socket-read staging buffer so the OS does not drop datagrams; the hook still
+fires the instant a packet lands.
+
+No RTP library provides a playout buffer, because the library cannot know the
+things one needs: your playout clock, how much latency you will accept, and how
+you want to conceal a missing packet. WebRTC keeps that in a separate component
+(NetEQ) for the same reason.
+
+So the buffer is not optional. uvgRTP delivers packets when the network delivers
+them; CoreAudio demands exactly 480 frames every 10 ms, on time, forever. Without
+something in between, every callback that arrives a fraction of a millisecond
+ahead of its packet produces silence.
+
+### What the library replaces
+
+| | hand-rolled (`rtp.hpp`) | uvgRTP |
+| --- | --- | --- |
+| Socket, RTP header, sequence, timestamps | ~120 lines | 4 calls |
+| Jitter buffer | yours | yours |
+| Audio plumbing | yours | yours |
+| RTCP, SRTP/ZRTP, multicast, fragmentation | absent | included |
+| Dependency | libc | a library to build and ship |
+
+For L16 audio at a fixed ptime, the part uvgRTP replaces is the part that is
+already simple and already tested here. It earns its place the moment you want
+RTCP receiver reports, SRTP, or video alongside the audio — and RTCP in
+particular is what you need to adapt a jitter buffer automatically.
+
+### Building these
+
+uvgRTP is not in Homebrew; build and install it, then point CMake at it:
+
+```sh
+git clone --depth 1 https://github.com/ultravideo/uvgRTP.git
+cmake -S uvgRTP -B uvgRTP/build -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=$HOME/.local
+cmake --build uvgRTP/build -j && cmake --install uvgRTP/build
+
+cmake --preset debug -DCMAKE_PREFIX_PATH=$HOME/.local
+```
+
+Without it, `find_package(uvgrtp)` fails quietly and these three are skipped.
+
+### Running them
+
+```sh
+./build/debug/examples/example_uvgrtp_recv &            # counters only
+./build/debug/examples/example_uvgrtp_send              # 3 s of 440 Hz
+
+./build/debug/examples/example_uvgrtp_coreaudio_recv &  # plays it
+./build/debug/examples/example_uvgrtp_send
+```
+
+These use uvgRTP's default payload type 11, so they talk to each other but not
+to the `rtp.hpp` pair above, which uses 96. Add
+`configure_ctx(RCC_DYN_PAYLOAD_TYPE, 96)` to both uvgRTP streams to bridge them.
 
 ### Notes
 

@@ -64,6 +64,17 @@ if(uvgrtp_FOUND)
     interkom_add_example(example_uvgrtp_recv rtp/uvgrtp_recv.cpp)
     target_link_libraries(example_uvgrtp_send PRIVATE uvgrtp::uvgrtp)
     target_link_libraries(example_uvgrtp_recv PRIVATE uvgrtp::uvgrtp)
+
+    if(APPLE)
+        interkom_add_example(example_uvgrtp_coreaudio_recv rtp/uvgrtp_coreaudio_recv.cpp)
+        target_link_libraries(example_uvgrtp_coreaudio_recv PRIVATE
+            uvgrtp::uvgrtp
+            "-framework AudioToolbox"
+            "-framework AudioUnit"
+            "-framework CoreAudio"
+            "-framework CoreFoundation"
+        )
+    endif()
 else()
     message(STATUS "examples: uvgRTP not found, skipping uvgRTP examples")
 endif()
