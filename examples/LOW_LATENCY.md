@@ -86,13 +86,17 @@ one to keep.
 
 ## CoreAudio knobs we did not use
 
-**The buffer size itself** — the single biggest lever, and we never touch it.
-`kAudioUnitProperty_MaximumFramesPerSlice` (which we do set) only promises *"I
-can handle up to this"*; it does not request anything.
-- `kAudioDevicePropertyBufferFrameSize` — the actual I/O quantum. Set this.
+**The buffer size itself** — the single biggest lever, untouched by the
+capture/playback pair and used by the RTP pair.
+`kAudioUnitProperty_MaximumFramesPerSlice` (which all of them set) only promises
+*"I can handle up to this"*; it does not request anything.
+- `kAudioDevicePropertyBufferFrameSize` — the actual I/O quantum. The RTP
+  examples set it to 480 frames, one 10 ms packet, and the device honours that
+  exactly on both the input and the output side *(measured)*. One callback then
+  produces or consumes exactly one packet.
 - `kAudioDevicePropertyBufferFrameSizeRange` — what the device permits. Here:
-  **15 to 4096 frames** *(measured)*, against a current 512. 64 frames is
-  1.33 ms, and a plausible target.
+  **15 to 4096 frames** *(measured)*, against a default of 512. 64 frames is
+  1.33 ms, and a plausible target below the packet-sized 480.
 - `kAudioDevicePropertyUsesVariableBufferFrameSizes` — for devices that vary it.
 
 **Avoiding conversion**
@@ -124,7 +128,8 @@ can handle up to this"*; it does not request anything.
 - Our `coreaudio/capture.cpp` calls `fwrite` **inside the render callback**. That
   is a real-time violation — file I/O can block for milliseconds. Fine for an
   example, wrong for a product: hand samples to a writer thread over a lock-free
-  ring buffer instead.
+  ring buffer instead. `rtp/rtp.hpp` is the version that does it properly, and
+  the handoff costs tens of microseconds.
 
 **Intercom-specific**
 - `kAudioUnitSubType_VoiceProcessingIO` instead of `HALOutput` — gives echo
@@ -132,6 +137,98 @@ can handle up to this"*; it does not request anything.
   deliberate trade, not a free win.
 - An aggregate device when capturing and playing at once, so input and output
   share one clock. Two independent clocks force resampling and drift correction.
+
+## The RTP pair's budget
+
+`rtp/rtp.hpp` and the four `rtp/*.cpp` examples are the first thing here that
+has a *network* in the middle, which changes which number matters. Shrinking a
+10 ms device buffer is pointless behind a 200 ms jitter buffer — so the jitter
+buffer is the first thing to argue about, not the last.
+
+One-way, mouth to ear, as the examples ship:
+
+| Stage | Cost | Chosen or inherited |
+| --- | --- | --- |
+| Capture device buffer | **10 ms** *(measured)* | chosen: 480 frames, one packet |
+| Convert + queue in the callback | nanoseconds | pure arithmetic, no syscall |
+| Semaphore wakeup → sender thread | tens of µs | the price of a clean RT thread |
+| Packetisation | 0 | one callback *is* one packet |
+| Encode | 0 | L16 is not a codec |
+| Network | yours | 1.5 Mbit/s mono |
+| Jitter buffer | **20 ms** | chosen: `kJitterPackets = 2` |
+| Playback device buffer | **10 ms** *(measured)* | chosen: 480 frames |
+
+≈ **40 ms** plus the network and the HAL's own device and safety offsets, which
+`kAudioDevicePropertyLatency` and `kAudioDevicePropertySafetyOffset` report and
+nothing above counts.
+
+Half of that is the jitter buffer, and it is the only stage that is pure policy:
+`kJitterPackets = 1` takes the total to 30 ms, and anything less than one packet
+is not a buffer at all.
+
+### What the choices cost
+
+**Sending from a thread rather than the callback.** The callback converts,
+writes into a lock-free queue and posts a semaphore; a sender thread owns the
+socket. The alternative — `send()` straight from the real-time thread — saves
+the wakeup but puts a syscall on a thread that must never block. Measured at
+101.9 packets per second with zero frames dropped, so the wakeup keeps up
+easily *(measured)*.
+
+**Pacing from the audio clock, not a timer.** The sender thread transmits when
+the callback hands it a packet and sleeps otherwise. A timer-driven sender would
+be a second clock: faster than the device and it starves, slower and its queue
+grows without bound. Sequence and timestamp deltas came back as exactly 1 and
+480 for every packet *(measured)*, which is what having one clock looks like.
+
+**A fixed jitter buffer, not an adaptive one.** Underruns zero-fill, bump a
+counter, and re-prime to the target. That is honest but blunt: each underrun
+costs a packet or two of silence. Fed at exactly 100 packets per second, the
+2-packet buffer ran 500 packets with **zero** underruns; fed by `ffmpeg -re`,
+which paces at ~94 packets per second, it underran about 10 times a second
+*(measured)* — the sink consuming faster than the source delivers, which no
+buffer size fixes.
+
+That last case is the one a product has to solve, and the fix is not a bigger
+buffer. Two machines have two crystals; a few hundred ppm apart is normal, and
+it accumulates forever. The real answer is drift compensation — resample by the
+measured ratio, or time-stretch like WebRTC's NetEQ — which also buys graceful
+concealment instead of silence.
+
+### Network knobs we did use
+
+- `connect()` on the UDP socket — pins the route once instead of resolving it
+  per packet, and makes `send()` report ICMP port-unreachable as an error, so
+  "nobody is listening" is visible rather than silent *(measured on loopback)*.
+- `O_NONBLOCK` — a full socket buffer drops a packet instead of stalling the
+  sender. For live audio, dropping late audio is correct.
+- `IP_TOS = 0xB8` (DSCP EF) — marks the stream expedited forwarding, so managed
+  switches and routers queue it ahead of bulk traffic.
+- `SO_RCVTIMEO` — only so the receive thread notices a stop request without a
+  wakeup pipe.
+
+### Network knobs we did not use
+
+- **Opus** (RFC 7587) instead of L16. 2.5 to 20 ms frames and roughly 1/50th the
+  bitrate, at the cost of ~5 ms algorithmic delay at the shortest frame. The
+  right trade the moment the path stops being a LAN.
+- **RTCP** (RFC 3550) — receiver reports carry the loss and jitter the sender
+  cannot see. Needed to adapt anything automatically.
+- **An adaptive jitter buffer with time-stretching** — the single biggest
+  remaining latency win, per the budget above.
+- **Packet loss concealment** beyond silence — interpolate from the last good
+  packet instead of muting.
+- **`SO_RCVBUF` / `SO_SNDBUF`** — a large kernel buffer hides a burst and adds
+  latency doing it; small is better here, and worth measuring.
+- **RTP header extensions** for an audio level or a send timestamp, which is
+  what lets a receiver measure one-way delay rather than infer it.
+- **SRTP** if the path is not trusted. Encryption is cheap; the key exchange is
+  the part that needs designing.
+- **Multicast** for one-to-many intercom, instead of a packet per listener.
+- **`SO_TIMESTAMPNS` / `SO_TIMESTAMP`** — kernel receive timestamps, for
+  measuring real network jitter instead of guessing from arrival order.
+- **Thread priority on the network threads.** They are ordinary threads today;
+  under load the scheduler can delay them past a packet interval.
 
 ## Cross-cutting
 
@@ -142,6 +239,6 @@ can handle up to this"*; it does not request anything.
   CPU, and resamplers add their own delay.
 - **Count every stage.** Capture buffer + encode + network jitter buffer +
   decode + playback buffer. Shrinking a 10 ms device buffer is pointless behind a
-  200 ms jitter buffer.
+  200 ms jitter buffer. The RTP budget above is what counting them looks like.
 - **Measure, don't assume.** The 260 ms above looked like a correct 20 ms request
   right up until it was read back with `pa_stream_get_buffer_attr()`.
