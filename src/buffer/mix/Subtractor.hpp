@@ -1,7 +1,7 @@
 #pragma once
 
 #include "buffer/Input.hpp"
-#include "buffer/Mixer.hpp"
+#include "buffer/mix/Mixer.hpp"
 
 #include <cstddef>
 #include <cstdint>

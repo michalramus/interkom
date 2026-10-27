@@ -1,4 +1,4 @@
-#include "buffer/CommunicateBuffer.hpp"
+#include "buffer/source/CommunicateBuffer.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "buffer/JitterTypes.hpp"
+#include "buffer/jitter/JitterTypes.hpp"
 
 #include <cstddef>
 #include <cstdint>

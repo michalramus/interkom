@@ -1,4 +1,4 @@
-#include "buffer/Mixer.hpp"
+#include "buffer/mix/Mixer.hpp"
 
 #include <algorithm>
 #include <limits>

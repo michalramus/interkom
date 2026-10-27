@@ -23,13 +23,13 @@ set(INTERKOM_WARNINGS
 
 # Components. The audio backend is picked by platform; RTP needs uvgRTP.
 add_library(interkom_core STATIC
-    src/buffer/CommunicateBuffer.cpp
-    src/buffer/DepthPolicy.cpp
-    src/buffer/HeapStore.cpp
+    src/buffer/source/CommunicateBuffer.cpp
+    src/buffer/jitter/DepthPolicy.cpp
+    src/buffer/jitter/HeapStore.cpp
     src/buffer/Input.cpp
-    src/buffer/Mixer.cpp
-    src/buffer/RepeatFadePlc.cpp
-    src/buffer/Subtractor.cpp
+    src/buffer/mix/Mixer.cpp
+    src/buffer/jitter/RepeatFadePlc.cpp
+    src/buffer/mix/Subtractor.cpp
     src/clock/DeviceClock.cpp
     src/clock/TimerClock.cpp
 )

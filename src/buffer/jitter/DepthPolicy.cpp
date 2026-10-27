@@ -1,4 +1,4 @@
-#include "buffer/DepthPolicy.hpp"
+#include "buffer/jitter/DepthPolicy.hpp"
 
 #include <algorithm>
 #include <cmath>

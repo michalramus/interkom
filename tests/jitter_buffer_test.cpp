@@ -1,7 +1,7 @@
 // Jitter buffer behaviour, driven one pull at a time. Chunks are 4 frames so
 // the arithmetic stays readable; packet n carries the value (n + 1) * 100.
 
-#include "buffer/JitterBuffer.hpp"
+#include "buffer/jitter/JitterBuffer.hpp"
 #include "check.hpp"
 
 #include <array>

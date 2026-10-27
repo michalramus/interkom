@@ -1,9 +1,9 @@
 // Input's per-tick cache, the message player, the mixer and mix-minus.
 
-#include "buffer/CommunicateBuffer.hpp"
 #include "buffer/Input.hpp"
-#include "buffer/Mixer.hpp"
-#include "buffer/Subtractor.hpp"
+#include "buffer/mix/Mixer.hpp"
+#include "buffer/mix/Subtractor.hpp"
+#include "buffer/source/CommunicateBuffer.hpp"
 #include "check.hpp"
 
 #include <algorithm>

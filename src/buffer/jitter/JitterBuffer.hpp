@@ -1,10 +1,10 @@
 #pragma once
 
-#include "buffer/DepthPolicy.hpp"
-#include "buffer/HeapStore.hpp"
 #include "buffer/Input.hpp"
-#include "buffer/JitterTypes.hpp"
-#include "buffer/RepeatFadePlc.hpp"
+#include "buffer/jitter/DepthPolicy.hpp"
+#include "buffer/jitter/HeapStore.hpp"
+#include "buffer/jitter/JitterTypes.hpp"
+#include "buffer/jitter/RepeatFadePlc.hpp"
 
 #include <algorithm>
 #include <atomic>

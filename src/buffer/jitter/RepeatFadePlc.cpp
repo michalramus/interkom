@@ -1,4 +1,4 @@
-#include "buffer/RepeatFadePlc.hpp"
+#include "buffer/jitter/RepeatFadePlc.hpp"
 
 #include <algorithm>
 
