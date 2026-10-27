@@ -70,3 +70,13 @@ option(INTERKOM_BUILD_EXAMPLES "Build backend examples" ON)
 if(INTERKOM_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+option(INTERKOM_BUILD_TESTS "Build tests" ON)
+
+if(INTERKOM_BUILD_TESTS)
+    enable_testing()
+    add_executable(jitter_buffer_test tests/jitter_buffer_test.cpp)
+    target_include_directories(jitter_buffer_test PRIVATE src)
+    target_compile_options(jitter_buffer_test PRIVATE ${INTERKOM_WARNINGS})
+    add_test(NAME jitter_buffer COMMAND jitter_buffer_test)
+endif()
