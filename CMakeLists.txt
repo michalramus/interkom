@@ -42,7 +42,10 @@ if(PkgConfig_FOUND)
 endif()
 
 if(APPLE)
-    target_sources(interkom_core PRIVATE src/audio/Mic_coreaudio.cpp)
+    target_sources(interkom_core PRIVATE
+        src/audio/Mic_coreaudio.cpp
+        src/audio/Speaker_coreaudio.cpp
+    )
     target_link_libraries(interkom_core PUBLIC
         "-framework AudioToolbox"
         "-framework AudioUnit"
@@ -50,10 +53,13 @@ if(APPLE)
         "-framework CoreFoundation"
     )
 elseif(TARGET PkgConfig::PULSE)
-    target_sources(interkom_core PRIVATE src/audio/Mic_pulseaudio.cpp)
+    target_sources(interkom_core PRIVATE
+        src/audio/Mic_pulseaudio.cpp
+        src/audio/Speaker_pulseaudio.cpp
+    )
     target_link_libraries(interkom_core PUBLIC PkgConfig::PULSE)
 else()
-    message(STATUS "interkom: no audio backend found, skipping Mic")
+    message(STATUS "interkom: no audio backend found, skipping Mic and Speaker")
 endif()
 
 find_package(uvgrtp QUIET)
