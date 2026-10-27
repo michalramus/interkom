@@ -4,6 +4,7 @@
 #include "buffer/CommunicateBuffer.hpp"
 #include "buffer/Input.hpp"
 #include "buffer/Mixer.hpp"
+#include "buffer/Subtractor.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -112,21 +113,19 @@ void saturates() {
     assert(loud.produced == 1);
 }
 
-// Mix-minus for three participants: each hears the other two. Every jitter
-// buffer sits in two mixers but must be consumed once per tick.
+// Mix-minus for three participants: one mixer of everyone, one subtractor per
+// listener. Each input is consumed once per tick however many pull it.
 void mixMinus() {
     Counter a{4, 1};
     Counter b{4, 10};
     Counter c{4, 100};
-    Mixer forA{4};
-    Mixer forB{4};
-    Mixer forC{4};
-    forA.addInput(&b);
-    forA.addInput(&c);
-    forB.addInput(&a);
-    forB.addInput(&c);
-    forC.addInput(&a);
-    forC.addInput(&b);
+    Mixer all{4};
+    all.addInput(&a);
+    all.addInput(&b);
+    all.addInput(&c);
+    Subtractor forA{&all, &a};
+    Subtractor forB{&all, &b};
+    Subtractor forC{&all, &c};
 
     for (std::uint64_t tick = 0; tick < 3; ++tick) {
         const auto n = static_cast<std::int16_t>(tick + 1);
@@ -137,6 +136,20 @@ void mixMinus() {
     assert(a.produced == 3 && b.produced == 3 && c.produced == 3);
 }
 
+// The full mix clips at 32767, but each listener's mix-minus does not.
+void mixMinusExactWhenSumClips() {
+    Counter a{4, 32000};
+    Counter b{4, 2000};
+    Mixer all{4};
+    all.addInput(&a);
+    all.addInput(&b);
+    Subtractor forA{&all, &a};
+    Subtractor forB{&all, &b};
+    assert(pull(all, 0)[0] == 32767);
+    assert(pull(forA, 0)[0] == 2000);
+    assert(pull(forB, 0)[0] == 32000);
+}
+
 } // namespace
 
 int main() {
@@ -145,6 +158,7 @@ int main() {
     mixes();
     saturates();
     mixMinus();
+    mixMinusExactWhenSumClips();
     std::cout << "buffers: all passed\n";
     return 0;
 }

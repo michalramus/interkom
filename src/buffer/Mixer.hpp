@@ -10,9 +10,9 @@
 
 // Sums its inputs into one chunk. Being an Input itself, mixers nest.
 //
-// Mix-minus is one Mixer per output whose list leaves out the listener's own
-// input. Inputs shared between those mixers are pulled with the same tick, so
-// Input's cache makes each one produce once per tick.
+// Mix-minus is one Mixer of everyone plus a Subtractor per listener, which
+// takes the listener's own input back out of the sum. rawSum() keeps the sum
+// before clipping so that subtraction stays exact.
 //
 // addInput() and removeInput() run on one control thread and only queue a
 // command in a lock-free single-producer single-consumer queue; produce()
@@ -27,6 +27,11 @@ class Mixer final : public Input {
     // Control thread. False if the command queue is full; try again later.
     bool addInput(Input* input);
     bool removeInput(Input* input);
+
+    // Consumer thread. The sum of the last tick produced, before clipping.
+    [[nodiscard]] const std::int32_t* rawSum() const {
+        return sum_.data();
+    }
 
   protected:
     void produce(std::int16_t* out) override;
