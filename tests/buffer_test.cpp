@@ -3,6 +3,7 @@
 #undef NDEBUG // these asserts are the test, keep them in release builds too
 #include "buffer/CommunicateBuffer.hpp"
 #include "buffer/Input.hpp"
+#include "buffer/Mixer.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -78,11 +79,72 @@ void communicate() {
     assert(silent(pull(messages, tick++)));
 }
 
+void mixes() {
+    Counter a{4};
+    Counter b{4, 10};
+    Mixer mixer{4};
+    std::uint64_t tick = 0;
+    assert(silent(pull(mixer, tick++))); // no inputs yet
+
+    assert(mixer.addInput(&a) && mixer.addInput(&b));
+    assert(pull(mixer, tick++)[0] == 1 + 10);
+    assert(pull(mixer, tick++)[0] == 2 + 20);
+
+    assert(mixer.removeInput(&b));
+    assert(pull(mixer, tick++)[0] == 3);
+    assert(b.produced == 2); // no longer pulled
+}
+
+void saturates() {
+    Counter loud{4, 30000};
+    Counter louder{4, 30000};
+    Counter quiet{4, -30000};
+    Counter quieter{4, -30000};
+    Mixer up{4};
+    Mixer down{4};
+    up.addInput(&loud);
+    up.addInput(&loud); // already in: ignored
+    up.addInput(&louder);
+    down.addInput(&quiet);
+    down.addInput(&quieter);
+    assert(pull(up, 0)[0] == 32767);
+    assert(pull(down, 0)[0] == -32768);
+    assert(loud.produced == 1);
+}
+
+// Mix-minus for three participants: each hears the other two. Every jitter
+// buffer sits in two mixers but must be consumed once per tick.
+void mixMinus() {
+    Counter a{4, 1};
+    Counter b{4, 10};
+    Counter c{4, 100};
+    Mixer forA{4};
+    Mixer forB{4};
+    Mixer forC{4};
+    forA.addInput(&b);
+    forA.addInput(&c);
+    forB.addInput(&a);
+    forB.addInput(&c);
+    forC.addInput(&a);
+    forC.addInput(&b);
+
+    for (std::uint64_t tick = 0; tick < 3; ++tick) {
+        const auto n = static_cast<std::int16_t>(tick + 1);
+        assert(pull(forA, tick)[0] == 10 * n + 100 * n);
+        assert(pull(forB, tick)[0] == 1 * n + 100 * n);
+        assert(pull(forC, tick)[0] == 1 * n + 10 * n);
+    }
+    assert(a.produced == 3 && b.produced == 3 && c.produced == 3);
+}
+
 } // namespace
 
 int main() {
     cachedPerTick();
     communicate();
+    mixes();
+    saturates();
+    mixMinus();
     std::cout << "buffers: all passed\n";
     return 0;
 }

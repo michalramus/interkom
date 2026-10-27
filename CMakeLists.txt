@@ -25,6 +25,7 @@ set(INTERKOM_WARNINGS
 add_library(interkom_core STATIC
     src/buffer/CommunicateBuffer.cpp
     src/buffer/Input.cpp
+    src/buffer/Mixer.cpp
     src/clock/TimerClock.cpp
 )
 target_include_directories(interkom_core PUBLIC src)
