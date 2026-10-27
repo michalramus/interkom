@@ -23,6 +23,7 @@ set(INTERKOM_WARNINGS
 
 # Components. The audio backend is picked by platform; RTP needs uvgRTP.
 add_library(interkom_core STATIC
+    src/buffer/CommunicateBuffer.cpp
     src/buffer/Input.cpp
     src/clock/TimerClock.cpp
 )
@@ -80,4 +81,9 @@ if(INTERKOM_BUILD_TESTS)
     target_link_libraries(jitter_buffer_test PRIVATE interkom_core)
     target_compile_options(jitter_buffer_test PRIVATE ${INTERKOM_WARNINGS})
     add_test(NAME jitter_buffer COMMAND jitter_buffer_test)
+
+    add_executable(buffer_test tests/buffer_test.cpp)
+    target_link_libraries(buffer_test PRIVATE interkom_core)
+    target_compile_options(buffer_test PRIVATE ${INTERKOM_WARNINGS})
+    add_test(NAME buffer COMMAND buffer_test)
 endif()
