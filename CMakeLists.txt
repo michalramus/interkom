@@ -41,6 +41,7 @@ if(PkgConfig_FOUND)
     pkg_check_modules(PULSE QUIET IMPORTED_TARGET libpulse)
 endif()
 
+set(INTERKOM_AUDIO ON)
 if(APPLE)
     target_sources(interkom_core PRIVATE
         src/audio/Mic_coreaudio.cpp
@@ -59,6 +60,7 @@ elseif(TARGET PkgConfig::PULSE)
     )
     target_link_libraries(interkom_core PUBLIC PkgConfig::PULSE)
 else()
+    set(INTERKOM_AUDIO OFF)
     message(STATUS "interkom: no audio backend found, skipping Mic and Speaker")
 endif()
 
@@ -73,11 +75,16 @@ else()
     message(STATUS "interkom: uvgRTP not found, skipping RTP")
 endif()
 
-add_executable(interkom
-    src/main.cpp
-)
-target_link_libraries(interkom PRIVATE interkom_core)
-target_compile_options(interkom PRIVATE ${INTERKOM_WARNINGS})
+# The two programs need both the network and the audio side.
+if(uvgrtp_FOUND AND INTERKOM_AUDIO)
+    foreach(program server client)
+        add_executable(interkom_${program} src/${program}_main.cpp)
+        target_link_libraries(interkom_${program} PRIVATE interkom_core)
+        target_compile_options(interkom_${program} PRIVATE ${INTERKOM_WARNINGS})
+    endforeach()
+else()
+    message(STATUS "interkom: needs uvgRTP and an audio backend, skipping server and client")
+endif()
 
 option(INTERKOM_BUILD_EXAMPLES "Build backend examples" ON)
 
