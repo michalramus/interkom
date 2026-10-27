@@ -5,24 +5,19 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <utility>
 
 // Ticks when an audio device callback calls tick(), so the device clock paces
 // everything. onTick runs on that callback's real-time thread: it must not
 // block or allocate.
 class DeviceClock final : public Clock {
   public:
-    explicit DeviceClock(std::function<void(std::uint64_t)> onTick) : onTick_(std::move(onTick)) {}
+    explicit DeviceClock(std::function<void(std::uint64_t)> onTick);
 
-    void start() override { running_.store(true, std::memory_order_relaxed); }
-    void stop() override { running_.store(false, std::memory_order_relaxed); }
+    void start() override;
+    void stop() override;
 
     // Device callback thread, once per chunk.
-    void tick() {
-        if (running_.load(std::memory_order_relaxed)) {
-            onTick_(tick_++);
-        }
-    }
+    void tick();
 
   private:
     std::function<void(std::uint64_t)> onTick_;

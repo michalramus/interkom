@@ -2,8 +2,6 @@
 
 #include "buffer/JitterTypes.hpp"
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -26,11 +24,11 @@ class StaticDepth {
 
     void record(std::int32_t /*lateness*/) {}
 
-    bool grow(std::size_t /*chunks*/, std::size_t /*buffered*/) { return false; }
-
-    std::size_t shrink(std::size_t buffered) {
-        return buffered > config_.maxChunks ? buffered - config_.depthChunks : 0;
+    bool grow(std::size_t /*chunks*/, std::size_t /*buffered*/) {
+        return false;
     }
+
+    std::size_t shrink(std::size_t buffered);
 
   private:
     JitterConfig config_;
@@ -51,64 +49,18 @@ class StaticDepth {
 // lateness, a fast one as a growing early margin.
 class AdaptiveDepth {
   public:
-    explicit AdaptiveDepth(const JitterConfig& config) : config_(config) {
-        samples_.reserve(config_.latenessWindow);
-        scratch_.reserve(config_.latenessWindow);
-    }
+    explicit AdaptiveDepth(const JitterConfig& config);
 
-    void record(std::int32_t lateness) {
-        if (samples_.size() < config_.latenessWindow) {
-            samples_.push_back(lateness);
-        } else {
-            samples_[next_] = lateness;
-        }
-        next_ = (next_ + 1) % config_.latenessWindow;
-    }
-
-    bool grow(std::size_t chunks, std::size_t buffered) {
-        if (buffered + chunks > config_.maxChunks || percentile() <= 0) {
-            return false;
-        }
-        shift(-static_cast<std::int32_t>(chunks));
-        pulls_ = 0;
-        return true;
-    }
-
-    std::size_t shrink(std::size_t buffered) {
-        if (buffered > config_.maxChunks) {
-            return buffered - config_.maxChunks; // burst; don't wait a window
-        }
-        if (++pulls_ < config_.shrinkWindow) {
-            return 0;
-        }
-        pulls_ = 0;
-        if (samples_.size() < config_.latenessWindow || buffered <= config_.minChunks ||
-            percentile() > -1) {
-            return 0;
-        }
-        shift(1);
-        return 1;
-    }
+    void record(std::int32_t lateness);
+    bool grow(std::size_t chunks, std::size_t buffered);
+    std::size_t shrink(std::size_t buffered);
 
   private:
     // Rounded up, so with 100 samples it takes 5 late ones to go positive.
-    std::int32_t percentile() {
-        if (samples_.empty()) {
-            return 0;
-        }
-        scratch_.assign(samples_.begin(), samples_.end()); // reserved: no allocation
-        const auto index = static_cast<std::ptrdiff_t>(
-            std::ceil(0.95 * static_cast<double>(scratch_.size() - 1)));
-        std::nth_element(scratch_.begin(), scratch_.begin() + index, scratch_.end());
-        return scratch_[static_cast<std::size_t>(index)];
-    }
+    std::int32_t percentile();
 
     // The cursor moved, so every remembered packet would now be this much later.
-    void shift(std::int32_t chunks) {
-        for (auto& sample : samples_) {
-            sample += chunks;
-        }
-    }
+    void shift(std::int32_t chunks);
 
     JitterConfig config_;
     std::vector<std::int32_t> samples_;
