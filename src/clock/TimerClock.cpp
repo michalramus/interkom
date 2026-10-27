@@ -1,6 +1,6 @@
 #include "clock/TimerClock.hpp"
 
-TimerClock::TimerClock(std::chrono::microseconds period, std::function<void()> onTick)
+TimerClock::TimerClock(std::chrono::microseconds period, std::function<void(std::uint64_t)> onTick)
     : period_(period), onTick_(std::move(onTick)) {}
 
 TimerClock::~TimerClock() {
@@ -24,6 +24,6 @@ void TimerClock::run() {
     while (!quit_.load(std::memory_order_relaxed)) {
         deadline += period_;
         std::this_thread::sleep_until(deadline);
-        onTick_();
+        onTick_(tick_++);
     }
 }

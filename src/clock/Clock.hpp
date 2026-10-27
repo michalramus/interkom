@@ -1,8 +1,10 @@
 #pragma once
 
 // A source of ticks, once per chunk. Each tick calls the onTick given to the
-// concrete clock; onTick is meant to wake other threads (mixer, senders) or
-// pull one chunk, not to do heavy work.
+// concrete clock with a counter that rises by one per tick: the tick to pass to
+// Input::pull(), so an input shared by several mixers is consumed once. onTick
+// is meant to wake other threads (mixer, senders) or pull one chunk, not to do
+// heavy work.
 //
 // Two sources, swappable behind this interface:
 //   TimerClock   its own thread on steady_clock; for a mixer with no device

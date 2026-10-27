@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <thread>
 
@@ -11,7 +12,7 @@
 // against absolute deadlines, so a late wakeup does not shift later ones.
 class TimerClock final : public Clock {
   public:
-    TimerClock(std::chrono::microseconds period, std::function<void()> onTick);
+    TimerClock(std::chrono::microseconds period, std::function<void(std::uint64_t)> onTick);
     ~TimerClock() override;
     TimerClock(const TimerClock&) = delete;
     TimerClock& operator=(const TimerClock&) = delete;
@@ -25,7 +26,8 @@ class TimerClock final : public Clock {
     void run();
 
     std::chrono::microseconds period_;
-    std::function<void()> onTick_;
+    std::function<void(std::uint64_t)> onTick_;
     std::atomic_bool quit_{false};
+    std::uint64_t tick_ = 0; // timer thread only
     std::thread thread_;
 };
