@@ -18,8 +18,12 @@ class media_stream;
 } // namespace uvgrtp
 
 // Sends L16 audio over RTP from its own thread. push() is called from the mic
-// callback: it copies the chunk into a ring and wakes the sender thread, so
+// callback: it copies the samples into a ring and wakes the sender thread, so
 // the audio thread never touches the socket.
+//
+// Whatever the device hands to push(), packets carry exactly framesPerChunk
+// samples, and their timestamps count samples (not wall time), so a jitter
+// buffer can line them up chunk by chunk.
 class RTPSender {
   public:
     explicit RTPSender(RTPConfig config);
@@ -30,7 +34,8 @@ class RTPSender {
     bool start();
     void stop();
 
-    // Audio thread. Never blocks; drops the chunk if the ring is full.
+    // Audio thread. Any number of samples; each full chunk becomes a packet.
+    // Never blocks; drops a packet if the ring is full.
     void push(const std::int16_t* samples, std::size_t frames);
 
   private:
@@ -39,7 +44,7 @@ class RTPSender {
 
     struct Slot {
         std::array<std::uint8_t, kMaxSamples * 2> payload{}; // big-endian L16
-        std::size_t bytes = 0;
+        std::uint32_t timestamp = 0;
     };
 
     void run();
@@ -54,6 +59,8 @@ class RTPSender {
     std::atomic<std::size_t> read_{0};
     std::atomic<std::size_t> write_{0};
     std::counting_semaphore<kSlots> ready_{0};
+    std::size_t filled_ = 0;      // audio thread: samples in the slot being filled
+    std::uint32_t timestamp_ = 0; // audio thread: first sample of that slot
     std::atomic_bool quit_{false};
     std::thread thread_;
 };
