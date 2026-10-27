@@ -42,10 +42,11 @@ void add(Buffer& jb, std::uint32_t base, int packet) {
            kFrames);
 }
 
-template <class Buffer>
-Samples pull(Buffer& jb) {
+// Every call is a new tick.
+Samples pull(Input& jb) {
+    static std::uint64_t tick = 0;
     Samples out{};
-    jb.pull(out.data());
+    jb.pull(tick++, out.data());
     return out;
 }
 

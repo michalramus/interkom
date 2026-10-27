@@ -2,14 +2,15 @@
 
 #include "buffer/DepthPolicy.hpp"
 #include "buffer/HeapStore.hpp"
+#include "buffer/Input.hpp"
 #include "buffer/JitterTypes.hpp"
 #include "buffer/RepeatFadePlc.hpp"
 
 #include <algorithm>
 #include <atomic>
-#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 // Turns packets that arrive whenever the network delivers them into exactly one
@@ -18,8 +19,8 @@
 // Threading: add() runs on the RTP receive thread and only copies into a
 // lock-free single-producer single-consumer inbox. pull() runs on the consumer
 // (a speaker's render callback, or the mixer thread woken by a Clock) and does
-// everything else. pull() never waits: whatever is not in its slot by then is
-// concealed, and a deeper buffer, not a wait, is what buys more time.
+// everything else, in produce(). It never waits: whatever is not in its slot by
+// then is concealed, and a deeper buffer, not a wait, is what buys more time.
 //
 // Each part is swappable:
 //   Store  orders packets by timestamp     (HeapStore: std::priority_queue)
@@ -28,7 +29,7 @@
 //
 // One stream (one SSRC) per buffer; a mixer keeps one per participant.
 template <class Store = HeapStore, class Plc = RepeatFadePlc, class Depth = AdaptiveDepth>
-class JitterBuffer {
+class JitterBuffer final : public Input {
   public:
     struct Stats {
         std::uint64_t received = 0;
@@ -43,8 +44,8 @@ class JitterBuffer {
     };
 
     explicit JitterBuffer(const JitterConfig& config = {})
-        : config_(config), inbox_(config.inboxChunks + 1), store_(config_), plc_(config_),
-          depth_(config_) {}
+        : Input(config.framesPerChunk), config_(config), inbox_(config.inboxChunks + 1),
+          store_(config_), plc_(config_), depth_(config_) {}
 
     // RTP receive thread. Never blocks; drops the packet if the inbox is full.
     void add(std::uint32_t timestamp, const std::int16_t* samples, std::size_t frames) {
@@ -64,8 +65,17 @@ class JitterBuffer {
         write_.store(next, std::memory_order_release);
     }
 
-    // Consumer thread. Writes exactly framesPerChunk samples to out.
-    void pull(std::int16_t* out) {
+    // Any thread.
+    [[nodiscard]] Stats stats() const {
+        constexpr auto relaxed = std::memory_order_relaxed;
+        return {received_.load(relaxed),  late_.load(relaxed),    duplicates_.load(relaxed),
+                concealed_.load(relaxed), dropped_.load(relaxed), grows_.load(relaxed),
+                shrinks_.load(relaxed),   resyncs_.load(relaxed), depthChunks_.load(relaxed)};
+    }
+
+  protected:
+    // Consumer thread, through Input::pull(). Writes framesPerChunk samples.
+    void produce(std::int16_t* out) override {
         drain();
         const std::size_t frames = config_.framesPerChunk;
         if (!started_) {
@@ -96,14 +106,6 @@ class JitterBuffer {
             drop(chunks);
         }
         depthChunks_.store(store_.size(), std::memory_order_relaxed);
-    }
-
-    // Any thread.
-    Stats stats() const {
-        constexpr auto relaxed = std::memory_order_relaxed;
-        return {received_.load(relaxed),   late_.load(relaxed),    duplicates_.load(relaxed),
-                concealed_.load(relaxed),  dropped_.load(relaxed), grows_.load(relaxed),
-                shrinks_.load(relaxed),    resyncs_.load(relaxed), depthChunks_.load(relaxed)};
     }
 
   private:
