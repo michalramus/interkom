@@ -13,13 +13,13 @@ class session;
 } // namespace uvgrtp
 
 // Receives L16 audio over RTP. uvgRTP runs its own receive thread and calls
-// the callback the moment a packet lands; the callback is meant to wake the
-// jitter buffer thread, so it must not block.
+// the callback the moment a packet lands, already decoded to host-order
+// samples; the callback feeds a jitter buffer and must not block.
 class RTPReceiver {
   public:
-    // payload is big-endian L16, valid only for the duration of the call.
+    // samples are valid only for the duration of the call.
     using Callback = std::function<void(std::uint32_t timestamp, std::uint16_t sequence,
-                                        const std::uint8_t* payload, std::size_t bytes)>;
+                                        const std::int16_t* samples, std::size_t frames)>;
 
     RTPReceiver(RTPConfig config, Callback callback);
     ~RTPReceiver();
@@ -29,9 +29,11 @@ class RTPReceiver {
     bool start();
     void stop();
 
+    struct Hook; // decode state; public so uvgRTP's hook can reach it
+
   private:
     RTPConfig config_;
-    Callback callback_;
+    std::unique_ptr<Hook> hook_;
     std::unique_ptr<uvgrtp::context> context_;
     uvgrtp::session* session_ = nullptr;
 };
