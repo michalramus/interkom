@@ -1,9 +1,9 @@
 #pragma once
 
-#include "audio/DepthPolicy.hpp"
-#include "audio/HeapStore.hpp"
-#include "audio/JitterTypes.hpp"
-#include "audio/RepeatFadePlc.hpp"
+#include "buffer/DepthPolicy.hpp"
+#include "buffer/HeapStore.hpp"
+#include "buffer/JitterTypes.hpp"
+#include "buffer/RepeatFadePlc.hpp"
 
 #include <algorithm>
 #include <atomic>

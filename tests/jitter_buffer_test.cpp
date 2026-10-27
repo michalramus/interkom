@@ -2,7 +2,7 @@
 // the arithmetic stays readable; packet n carries the value (n + 1) * 100.
 
 #undef NDEBUG // these asserts are the test, keep them in release builds too
-#include "audio/JitterBuffer.hpp"
+#include "buffer/JitterBuffer.hpp"
 
 #include <array>
 #include <cassert>

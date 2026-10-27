@@ -1,6 +1,6 @@
 #pragma once
 
-#include "audio/JitterTypes.hpp"
+#include "buffer/JitterTypes.hpp"
 
 #include <algorithm>
 #include <cmath>
