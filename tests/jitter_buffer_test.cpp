@@ -1,11 +1,10 @@
 // Jitter buffer behaviour, driven one pull at a time. Chunks are 4 frames so
 // the arithmetic stays readable; packet n carries the value (n + 1) * 100.
 
-#undef NDEBUG // these asserts are the test, keep them in release builds too
 #include "buffer/JitterBuffer.hpp"
+#include "check.hpp"
 
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <iostream>
 
@@ -56,11 +55,11 @@ void inOrder(std::uint32_t base) {
     for (int i = 0; i < 20; ++i) {
         add(jb, base, i);
         const Samples out = pull(jb);
-        assert(out[0] == (i >= 2 ? value(i - 2) : 0));
+        CHECK(out[0] == (i >= 2 ? value(i - 2) : 0));
     }
     const auto stats = jb.stats();
-    assert(stats.received == 20 && stats.concealed == 0 && stats.late == 0);
-    assert(stats.depth == 2);
+    CHECK(stats.received == 20 && stats.concealed == 0 && stats.late == 0);
+    CHECK(stats.depth == 2);
 }
 
 void reorder(std::uint32_t base) {
@@ -70,9 +69,9 @@ void reorder(std::uint32_t base) {
         const int packet = (i % 3 == 1) ? i + 1 : (i % 3 == 2) ? i - 1 : i;
         add(jb, base, packet);
         const Samples out = pull(jb);
-        assert(out[0] == (i >= 2 ? value(i - 2) : 0));
+        CHECK(out[0] == (i >= 2 ? value(i - 2) : 0));
     }
-    assert(jb.stats().concealed == 0);
+    CHECK(jb.stats().concealed == 0);
 }
 
 void lossIsConcealed() {
@@ -84,13 +83,13 @@ void lossIsConcealed() {
         const Samples out = pull(jb);
         if (i == 7) {
             // Packet 4 repeated, fading.
-            assert(out[0] == value(4));
-            assert(out[kFrames - 1] < value(4) && out[kFrames - 1] > 0);
+            CHECK(out[0] == value(4));
+            CHECK(out[kFrames - 1] < value(4) && out[kFrames - 1] > 0);
         } else if (i >= 2) {
-            assert(out[0] == value(i - 2));
+            CHECK(out[0] == value(i - 2));
         }
     }
-    assert(jb.stats().concealed == 1);
+    CHECK(jb.stats().concealed == 1);
 }
 
 // Depth 1: pull i plays packet i - 1. Packet 5 shows up two pulls late, after
@@ -113,21 +112,21 @@ auto lateOnce(std::array<std::int16_t, 12>& played) {
 void lateIsDiscardedByStatic() {
     std::array<std::int16_t, 12> played{};
     const auto stats = lateOnce<Static>(played);
-    assert(stats.late == 1 && stats.grows == 0 && stats.concealed == 1);
-    assert(played[7] == value(6)); // slot moved on without it
+    CHECK(stats.late == 1 && stats.grows == 0 && stats.concealed == 1);
+    CHECK(played[7] == value(6)); // slot moved on without it
 }
 
 void lateRewindsAdaptive() {
     std::array<std::int16_t, 12> played{};
     const auto stats = lateOnce<Adaptive>(played);
-    assert(stats.late == 0 && stats.grows == 1 && stats.concealed == 1);
+    CHECK(stats.late == 0 && stats.grows == 1 && stats.concealed == 1);
     // Pull 6 concealed packet 5's slot; pull 7 rewinds and plays it, and from
     // there on everything is one chunk later.
-    assert(played[6] == value(4));
+    CHECK(played[6] == value(4));
     for (std::size_t i = 7; i < played.size(); ++i) {
-        assert(played[i] == value(static_cast<int>(i) - 2));
+        CHECK(played[i] == value(static_cast<int>(i) - 2));
     }
-    assert(stats.depth == 2);
+    CHECK(stats.depth == 2);
 }
 
 void shrinksToMinimum() {
@@ -136,11 +135,11 @@ void shrinksToMinimum() {
     for (int i = 0; i < 100; ++i) {
         add(jb, 0, i);
         const std::int16_t now = pull(jb)[0];
-        assert(now == 0 || now > last); // drops skip ahead, never repeat
+        CHECK(now == 0 || now > last); // drops skip ahead, never repeat
         last = now == 0 ? last : now;
     }
     const auto stats = jb.stats();
-    assert(stats.shrinks == 3 && stats.depth == 1 && stats.concealed == 0);
+    CHECK(stats.shrinks == 3 && stats.depth == 1 && stats.concealed == 0);
 }
 
 void duplicates() {
@@ -154,10 +153,10 @@ void duplicates() {
             add(jb, 0, 1); // played at pull 3
         }
         const Samples out = pull(jb);
-        assert(out[0] == (i >= 2 ? value(i - 2) : 0));
+        CHECK(out[0] == (i >= 2 ? value(i - 2) : 0));
     }
     const auto stats = jb.stats();
-    assert(stats.duplicates == 2 && stats.late == 0 && stats.concealed == 0);
+    CHECK(stats.duplicates == 2 && stats.late == 0 && stats.concealed == 0);
 }
 
 void resync() {
@@ -171,10 +170,10 @@ void resync() {
         add(jb, 1'000'000, i);
         const Samples out = pull(jb);
         if (i >= 2) {
-            assert(out[0] == value(i - 2));
+            CHECK(out[0] == value(i - 2));
         }
     }
-    assert(jb.stats().resyncs == 1);
+    CHECK(jb.stats().resyncs == 1);
 }
 
 } // namespace

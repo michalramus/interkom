@@ -1,13 +1,12 @@
-// Input's per-tick cache, the message player and the mixer.
+// Input's per-tick cache, the message player, the mixer and mix-minus.
 
-#undef NDEBUG // these asserts are the test, keep them in release builds too
 #include "buffer/CommunicateBuffer.hpp"
 #include "buffer/Input.hpp"
 #include "buffer/Mixer.hpp"
 #include "buffer/Subtractor.hpp"
+#include "check.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -45,23 +44,23 @@ bool silent(const Samples& samples) {
 
 void cachedPerTick() {
     Counter input{4};
-    assert(pull(input, 0)[0] == 1);
-    assert(pull(input, 0)[0] == 1); // same tick: cached, not produced again
-    assert(pull(input, 1)[0] == 2);
-    assert(input.produced == 2);
+    CHECK(pull(input, 0)[0] == 1);
+    CHECK(pull(input, 0)[0] == 1); // same tick: cached, not produced again
+    CHECK(pull(input, 1)[0] == 2);
+    CHECK(input.produced == 2);
 }
 
 // 8 kHz, 1000 frames per chunk: a message is 8 chunks.
 void communicate() {
     CommunicateBuffer messages{8000, 1000};
     std::uint64_t tick = 0;
-    assert(silent(pull(messages, tick++)));
+    CHECK(silent(pull(messages, tick++)));
 
     messages.select(1);
     for (int i = 0; i < 8; ++i) {
-        assert(!silent(pull(messages, tick++)));
+        CHECK(!silent(pull(messages, tick++)));
     }
-    assert(silent(pull(messages, tick++))); // ended, back to 0
+    CHECK(silent(pull(messages, tick++))); // ended, back to 0
 
     // Reselecting mid-message restarts it: 8 more chunks, not the 5 left.
     messages.select(2);
@@ -70,14 +69,14 @@ void communicate() {
     }
     messages.select(2);
     for (int i = 0; i < 8; ++i) {
-        assert(!silent(pull(messages, tick++)));
+        CHECK(!silent(pull(messages, tick++)));
     }
-    assert(silent(pull(messages, tick++)));
+    CHECK(silent(pull(messages, tick++)));
 
     messages.select(1);
     pull(messages, tick++);
     messages.select(0); // stop
-    assert(silent(pull(messages, tick++)));
+    CHECK(silent(pull(messages, tick++)));
 }
 
 void mixes() {
@@ -85,15 +84,15 @@ void mixes() {
     Counter b{4, 10};
     Mixer mixer{4};
     std::uint64_t tick = 0;
-    assert(silent(pull(mixer, tick++))); // no inputs yet
+    CHECK(silent(pull(mixer, tick++))); // no inputs yet
 
-    assert(mixer.addInput(&a) && mixer.addInput(&b));
-    assert(pull(mixer, tick++)[0] == 1 + 10);
-    assert(pull(mixer, tick++)[0] == 2 + 20);
+    CHECK(mixer.addInput(&a) && mixer.addInput(&b));
+    CHECK(pull(mixer, tick++)[0] == 1 + 10);
+    CHECK(pull(mixer, tick++)[0] == 2 + 20);
 
-    assert(mixer.removeInput(&b));
-    assert(pull(mixer, tick++)[0] == 3);
-    assert(b.produced == 2); // no longer pulled
+    CHECK(mixer.removeInput(&b));
+    CHECK(pull(mixer, tick++)[0] == 3);
+    CHECK(b.produced == 2); // no longer pulled
 }
 
 void saturates() {
@@ -108,9 +107,9 @@ void saturates() {
     up.addInput(&louder);
     down.addInput(&quiet);
     down.addInput(&quieter);
-    assert(pull(up, 0)[0] == 32767);
-    assert(pull(down, 0)[0] == -32768);
-    assert(loud.produced == 1);
+    CHECK(pull(up, 0)[0] == 32767);
+    CHECK(pull(down, 0)[0] == -32768);
+    CHECK(loud.produced == 1);
 }
 
 // Mix-minus for three participants: one mixer of everyone, one subtractor per
@@ -129,11 +128,11 @@ void mixMinus() {
 
     for (std::uint64_t tick = 0; tick < 3; ++tick) {
         const auto n = static_cast<std::int16_t>(tick + 1);
-        assert(pull(forA, tick)[0] == 10 * n + 100 * n);
-        assert(pull(forB, tick)[0] == 1 * n + 100 * n);
-        assert(pull(forC, tick)[0] == 1 * n + 10 * n);
+        CHECK(pull(forA, tick)[0] == 10 * n + 100 * n);
+        CHECK(pull(forB, tick)[0] == 1 * n + 100 * n);
+        CHECK(pull(forC, tick)[0] == 1 * n + 10 * n);
     }
-    assert(a.produced == 3 && b.produced == 3 && c.produced == 3);
+    CHECK(a.produced == 3 && b.produced == 3 && c.produced == 3);
 }
 
 // The full mix clips at 32767, but each listener's mix-minus does not.
@@ -145,9 +144,9 @@ void mixMinusExactWhenSumClips() {
     all.addInput(&b);
     Subtractor forA{&all, &a};
     Subtractor forB{&all, &b};
-    assert(pull(all, 0)[0] == 32767);
-    assert(pull(forA, 0)[0] == 2000);
-    assert(pull(forB, 0)[0] == 32000);
+    CHECK(pull(all, 0)[0] == 32767);
+    CHECK(pull(forA, 0)[0] == 2000);
+    CHECK(pull(forB, 0)[0] == 32000);
 }
 
 } // namespace
