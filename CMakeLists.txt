@@ -16,16 +16,54 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
-add_executable(interkom
-    src/main.cpp
-)
-
-target_include_directories(interkom PRIVATE src)
-
-target_compile_options(interkom PRIVATE
+set(INTERKOM_WARNINGS
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
+
+# Components. The audio backend is picked by platform; RTP needs uvgRTP.
+add_library(interkom_core STATIC
+    src/clock/Clock.cpp
+)
+target_include_directories(interkom_core PUBLIC src)
+target_compile_options(interkom_core PRIVATE ${INTERKOM_WARNINGS})
+
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(PULSE QUIET IMPORTED_TARGET libpulse)
+endif()
+
+if(APPLE)
+    target_sources(interkom_core PRIVATE src/audio/Mic_coreaudio.cpp)
+    target_link_libraries(interkom_core PUBLIC
+        "-framework AudioToolbox"
+        "-framework AudioUnit"
+        "-framework CoreAudio"
+        "-framework CoreFoundation"
+    )
+elseif(TARGET PkgConfig::PULSE)
+    target_sources(interkom_core PRIVATE src/audio/Mic_pulseaudio.cpp)
+    target_link_libraries(interkom_core PUBLIC PkgConfig::PULSE)
+else()
+    message(STATUS "interkom: no audio backend found, skipping Mic")
+endif()
+
+find_package(uvgrtp QUIET)
+if(uvgrtp_FOUND)
+    target_sources(interkom_core PRIVATE
+        src/rtp/RTPSender.cpp
+        src/rtp/RTPReceiver.cpp
+    )
+    target_link_libraries(interkom_core PUBLIC uvgrtp::uvgrtp)
+else()
+    message(STATUS "interkom: uvgRTP not found, skipping RTP")
+endif()
+
+add_executable(interkom
+    src/main.cpp
+)
+target_link_libraries(interkom PRIVATE interkom_core)
+target_compile_options(interkom PRIVATE ${INTERKOM_WARNINGS})
 
 option(INTERKOM_BUILD_EXAMPLES "Build backend examples" ON)
 
