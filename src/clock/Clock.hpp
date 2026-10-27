@@ -1,29 +1,23 @@
 #pragma once
 
-#include <atomic>
-#include <chrono>
-#include <functional>
-#include <thread>
-
-// Calls onTick once every period from its own thread. Ticks are scheduled
-// against absolute deadlines, so a late wakeup does not shift later ones.
-// onTick is meant to wake other threads (jitter buffer, senders, speakers),
-// not to do the work itself.
+// A source of ticks, once per chunk. Each tick calls the onTick given to the
+// concrete clock; onTick is meant to wake other threads (mixer, senders) or
+// pull one chunk, not to do heavy work.
+//
+// Two sources, swappable behind this interface:
+//   TimerClock   its own thread on steady_clock; for a mixer with no device
+//   DeviceClock  ticked by an audio device callback; for a beltpack, so the
+//                speaker's own clock drives playout and there is no second
+//                clock to drift against
 class Clock {
   public:
-    Clock(std::chrono::microseconds period, std::function<void()> onTick);
-    ~Clock();
+    Clock() = default;
+    virtual ~Clock() = default;
     Clock(const Clock&) = delete;
     Clock& operator=(const Clock&) = delete;
+    Clock(Clock&&) = delete;
+    Clock& operator=(Clock&&) = delete;
 
-    void start();
-    void stop();
-
-  private:
-    void run();
-
-    std::chrono::microseconds period_;
-    std::function<void()> onTick_;
-    std::atomic_bool quit_{false};
-    std::thread thread_;
+    virtual void start() = 0;
+    virtual void stop() = 0;
 };

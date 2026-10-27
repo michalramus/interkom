@@ -23,7 +23,7 @@ set(INTERKOM_WARNINGS
 
 # Components. The audio backend is picked by platform; RTP needs uvgRTP.
 add_library(interkom_core STATIC
-    src/clock/Clock.cpp
+    src/clock/TimerClock.cpp
 )
 target_include_directories(interkom_core PUBLIC src)
 target_compile_options(interkom_core PRIVATE ${INTERKOM_WARNINGS})
