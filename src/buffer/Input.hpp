@@ -2,34 +2,39 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
 // Anything that hands out one chunk of mono L16 per tick: a jitter buffer, a
 // message player, a mixer of other inputs.
 //
-// pull() caches the chunk per tick, so an input shared by several mixers (the
-// usual intercom case: A's jitter buffer is in B's, C's and D's mix) is
-// consumed once per tick and every mixer gets the same audio. All pulls of one
+// pull() returns a pointer to the chunk instead of copying it out. The memory
+// belongs to the input and stays valid until the input produces again, which
+// is the next tick: read it, do not keep it.
+//
+// pull() caches that pointer per tick, so an input shared by several mixers
+// (the usual intercom case: A's jitter buffer is in B's, C's and D's mix) is
+// consumed once per tick and every mixer reads the same audio. All pulls of one
 // tick must come from the same thread; pull() never waits.
 class Input {
   public:
-    explicit Input(std::size_t framesPerChunk);
+    explicit Input(std::size_t framesPerChunk) : frames_(framesPerChunk) {}
+
     virtual ~Input() = default;
     Input(const Input&) = delete;
     Input& operator=(const Input&) = delete;
     Input(Input&&) = delete;
     Input& operator=(Input&&) = delete;
 
-    // Writes exactly frames() samples to out.
-    void pull(std::uint64_t tick, std::int16_t* out);
+    // Exactly frames() samples, valid until the next tick.
+    const std::int16_t* pull(std::uint64_t tick);
 
     [[nodiscard]] std::size_t frames() const {
-        return cache_.size();
+        return frames_;
     }
 
   protected:
-    // Produces the next chunk; called at most once per tick.
-    virtual void produce(std::int16_t* out) = 0;
+    // Produces the next chunk into memory the input owns; called at most once
+    // per tick.
+    virtual const std::int16_t* produce() = 0;
 
     // The tick being produced, for inputs that pull other inputs.
     [[nodiscard]] std::uint64_t tick() const {
@@ -37,7 +42,7 @@ class Input {
     }
 
   private:
-    std::vector<std::int16_t> cache_;
+    std::size_t frames_;
+    const std::int16_t* chunk_ = nullptr;
     std::uint64_t tick_ = 0;
-    bool pulled_ = false;
 };

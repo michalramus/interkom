@@ -34,7 +34,7 @@ class Mixer final : public Input {
     }
 
   protected:
-    void produce(std::int16_t* out) override;
+    const std::int16_t* produce() override;
 
   private:
     struct Command {
@@ -54,5 +54,5 @@ class Mixer final : public Input {
     std::array<Input*, kMaxInputs> inputs_{};
     std::size_t count_ = 0;
     std::vector<std::int32_t> sum_;
-    std::vector<std::int16_t> chunk_;
+    std::vector<std::int16_t> out_;
 };

@@ -4,7 +4,7 @@
 #include <limits>
 
 Mixer::Mixer(std::size_t framesPerChunk)
-    : Input(framesPerChunk), sum_(framesPerChunk), chunk_(framesPerChunk) {}
+    : Input(framesPerChunk), sum_(framesPerChunk), out_(framesPerChunk) {}
 
 bool Mixer::addInput(Input* input) {
     return push({input, true});
@@ -41,20 +41,22 @@ void Mixer::apply() {
     }
 }
 
-void Mixer::produce(std::int16_t* out) {
+const std::int16_t* Mixer::produce() {
     apply();
 
+    // Summed straight from each input's own chunk; nothing is copied in.
     std::fill(sum_.begin(), sum_.end(), 0);
     for (std::size_t i = 0; i < count_; ++i) {
-        inputs_[i]->pull(tick(), chunk_.data());
+        const std::int16_t* chunk = inputs_[i]->pull(tick());
         for (std::size_t s = 0; s < sum_.size(); ++s) {
-            sum_[s] += chunk_[s];
+            sum_[s] += chunk[s];
         }
     }
 
     constexpr std::int32_t low = std::numeric_limits<std::int16_t>::min();
     constexpr std::int32_t high = std::numeric_limits<std::int16_t>::max();
     for (std::size_t s = 0; s < sum_.size(); ++s) {
-        out[s] = static_cast<std::int16_t>(std::clamp(sum_[s], low, high));
+        out_[s] = static_cast<std::int16_t>(std::clamp(sum_[s], low, high));
     }
+    return out_.data();
 }

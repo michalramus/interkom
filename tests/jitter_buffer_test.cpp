@@ -4,6 +4,7 @@
 #include "buffer/jitter/JitterBuffer.hpp"
 #include "check.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -45,7 +46,7 @@ void add(Buffer& jb, std::uint32_t base, int packet) {
 Samples pull(Input& jb) {
     static std::uint64_t tick = 0;
     Samples out{};
-    jb.pull(tick++, out.data());
+    std::copy_n(jb.pull(tick++), kFrames, out.begin());
     return out;
 }
 

@@ -7,6 +7,7 @@
 #include "buffer/jitter/RepeatFadePlc.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -74,27 +75,27 @@ class JitterBuffer final : public Input {
     }
 
   protected:
-    // Consumer thread, through Input::pull(). Writes framesPerChunk samples.
-    void produce(std::int16_t* out) override {
+    // Consumer thread, through Input::pull(). The only copy on the way out is
+    // the store's chunk into the Plc, which keeps it for concealment anyway.
+    const std::int16_t* produce() override {
         drain();
         const std::size_t frames = config_.framesPerChunk;
         if (!started_) {
-            std::fill_n(out, frames, std::int16_t{0});
-            return;
+            return silence_.data();
         }
 
         while (!store_.empty() && before(store_.top().timestamp, cursor_)) {
             store_.pop(); // a second copy of a slot that has been played
             duplicates_.fetch_add(1, std::memory_order_relaxed);
         }
+        const std::int16_t* out = nullptr;
         if (!store_.empty() && store_.top().timestamp == cursor_) {
-            std::copy_n(store_.top().samples.begin(), frames, out);
-            plc_.good(out, frames);
+            out = plc_.good(store_.top().samples.data(), frames);
             store_.pop();
             played_ = (played_ << 1U) | 1U;
             playing_ = true;
         } else {
-            plc_.conceal(out, frames);
+            out = plc_.conceal(frames);
             played_ <<= 1U;
             if (playing_) { // silence while priming is not a loss
                 concealed_.fetch_add(1, std::memory_order_relaxed);
@@ -106,6 +107,7 @@ class JitterBuffer final : public Input {
             drop(chunks);
         }
         depthChunks_.store(store_.size(), std::memory_order_relaxed);
+        return out;
     }
 
   private:
@@ -200,6 +202,7 @@ class JitterBuffer final : public Input {
     Store store_;
     Plc plc_;
     Depth depth_;
+    std::array<std::int16_t, kMaxFrames> silence_{};
     std::uint32_t cursor_ = 0; // timestamp of the next chunk pull() plays
     bool started_ = false;
     bool playing_ = false;

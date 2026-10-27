@@ -23,12 +23,14 @@ class CommunicateBuffer final : public Input {
     void select(std::size_t id);
 
   protected:
-    void produce(std::int16_t* out) override;
+    const std::int16_t* produce() override;
 
   private:
     static constexpr std::size_t kNone = ~std::size_t{0}; // nothing selected
 
     std::vector<std::vector<std::int16_t>> messages_; // [0] is empty: silence
+    std::vector<std::int16_t> tail_;                  // last, partial chunk of a message
+    std::vector<std::int16_t> silence_;               // nothing playing
     std::atomic<std::size_t> next_{kNone};
 
     // Consumer thread only.

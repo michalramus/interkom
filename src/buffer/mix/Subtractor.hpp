@@ -17,10 +17,10 @@ class Subtractor final : public Input {
     Subtractor(Mixer* sum, Input* own);
 
   protected:
-    void produce(std::int16_t* out) override;
+    const std::int16_t* produce() override;
 
   private:
     Mixer* sum_;
     Input* own_;
-    std::vector<std::int16_t> chunk_;
+    std::vector<std::int16_t> out_;
 };

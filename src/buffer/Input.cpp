@@ -1,14 +1,9 @@
 #include "buffer/Input.hpp"
 
-#include <algorithm>
-
-Input::Input(std::size_t framesPerChunk) : cache_(framesPerChunk) {}
-
-void Input::pull(std::uint64_t tick, std::int16_t* out) {
-    if (!pulled_ || tick != tick_) {
+const std::int16_t* Input::pull(std::uint64_t tick) {
+    if (chunk_ == nullptr || tick != tick_) {
         tick_ = tick;
-        pulled_ = true;
-        produce(cache_.data());
+        chunk_ = produce();
     }
-    std::copy(cache_.begin(), cache_.end(), out);
+    return chunk_;
 }
