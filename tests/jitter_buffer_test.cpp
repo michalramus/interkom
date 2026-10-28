@@ -95,9 +95,13 @@ void lossIsConcealed() {
 
 // Depth 1: pull i plays packet i - 1. Packet 5 shows up two pulls late, after
 // its slot was concealed.
+// minChunks 0: nothing holds, so the slot really is concealed and the late
+// packet is what moves the depth.
 template <class Buffer>
 auto lateOnce(std::array<std::int16_t, 12>& played) {
-    Buffer jb{config(1)};
+    JitterConfig c = config(1);
+    c.minChunks = 0;
+    Buffer jb{c};
     for (int i = 0; i < 12; ++i) {
         if (i == 7) {
             add(jb, 0, 5);
@@ -211,6 +215,55 @@ void burstTrimsToTarget() {
     CHECK(stats.depth == 2 && stats.shrinks == 9);
 }
 
+// Same late packet with minChunks 1: the buffer refuses to play its last
+// queued chunk, holds a stand-in instead, and packet 5 is then on time.
+void lowQueueHoldsAdaptive() {
+    std::array<std::int16_t, 12> played{};
+    Adaptive jb{config(1)};
+    for (int i = 0; i < 12; ++i) {
+        if (i == 7) {
+            add(jb, 0, 5);
+        }
+        if (i != 5) {
+            add(jb, 0, i);
+        }
+        played[static_cast<std::size_t>(i)] = pull(jb)[0];
+        if (i >= 1) {
+            CHECK(jb.stats().depth >= 1);
+        }
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.late == 0 && stats.concealed == 0 && stats.grows == 1);
+    CHECK(played[5] == value(3)); // stand-in: packet 3 repeated
+    for (std::size_t i = 6; i < played.size(); ++i) {
+        CHECK(played[i] == value(static_cast<int>(i) - 2));
+    }
+}
+
+// Packets arrive one per tick, the consumer pulls four at a time (a sound
+// server asking for a whole period). The depth grows until a burst fits, then
+// the queue never empties and every packet is played in order.
+void burstyConsumerHolds() {
+    Adaptive jb{config(2)};
+    std::int16_t last = 0;
+    int packet = 0;
+    for (int period = 0; period < 30; ++period) {
+        for (int i = 0; i < 4; ++i) {
+            add(jb, 0, packet++);
+        }
+        for (int i = 0; i < 4; ++i) {
+            const std::int16_t now = pull(jb)[0];
+            if (period >= 5) {
+                CHECK(jb.stats().depth >= 1);
+                CHECK(now == last + 100); // real audio, no gaps, no repeats
+            }
+            last = now;
+        }
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.late == 0 && stats.concealed == 0 && stats.shrinks == 0);
+}
+
 // The sender stops: after resyncChunks concealed chunks the buffer goes idle and
 // stops counting losses. When it comes back it anchors on the newest packet.
 void idleThenReturn() {
@@ -239,6 +292,22 @@ void idleThenReturn() {
     CHECK(stats.concealed == 5 && stats.idle == 13 && stats.depth == 2);
 }
 
+// Holding is bounded: a sender that stops still drains and goes idle.
+void heldStreamStillGoesIdle() {
+    JitterConfig c = config(2);
+    c.resyncChunks = 5;
+    Adaptive jb{c};
+    for (int i = 0; i < 10; ++i) {
+        add(jb, 0, i);
+        pull(jb);
+    }
+    for (int i = 0; i < 30; ++i) { // 1 played, 8 held, 1 played, 5 concealed
+        pull(jb);
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.grows == 8 && stats.concealed == 5 && stats.idle == 15);
+}
+
 } // namespace
 
 int main() {
@@ -249,6 +318,8 @@ int main() {
     lossIsConcealed();
     lateIsDiscardedByStatic();
     lateRewindsAdaptive();
+    lowQueueHoldsAdaptive();
+    burstyConsumerHolds();
     shrinksToMinimum();
     duplicates();
     resync();
@@ -256,6 +327,7 @@ int main() {
     startupBacklog<Adaptive>();
     burstTrimsToTarget();
     idleThenReturn();
+    heldStreamStillGoesIdle();
     std::cout << "jitter buffer: all passed\n";
     return 0;
 }

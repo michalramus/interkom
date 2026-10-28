@@ -4,13 +4,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 // A depth policy decides how much audio the jitter buffer holds. It never
-// touches audio itself; the buffer asks it three things:
+// touches audio itself; the buffer asks it four things:
 //
 //   record(lateness)        every packet; chunks past its slot, <= 0 is on time
 //   grow(chunks, buffered)  a late packet's slot was concealed: rewind to it?
+//   hold(buffered)          playing the next chunk would leave this many: stay
+//                           on it and play a concealed chunk instead?
 //   shrink(buffered)        once per pull: how many chunks to drop
 //
 // `buffered` is chunks queued ahead of the playout cursor. All three run on the
@@ -28,6 +31,10 @@ class StaticDepth {
         return false;
     }
 
+    bool hold(std::size_t /*buffered*/) {
+        return false;
+    }
+
     std::size_t shrink(std::size_t buffered);
 
   private:
@@ -42,8 +49,15 @@ class StaticDepth {
 // its cursor to that packet and plays it. The concealed chunk becomes the
 // inserted delay, and every later packet has that much more time.
 //
+// Holding: the queue never runs below minChunks while there is audio to play.
+// When playing the next chunk would leave fewer, the buffer plays a concealed
+// chunk and stays where it is, one chunk deeper. A consumer that pulls in
+// bursts (a sound server asking for a whole period at once) drains the queue
+// by the burst size; holding grows the depth until a burst fits.
+//
 // Shrinking: every shrinkWindow pulls, if 95% of packets arrived at least one
-// chunk early, drop one chunk. Blind for now: it may land mid-word.
+// chunk early and the queue never fell to minChunks in that window, drop one
+// chunk. Blind for now: it may land mid-word.
 // A burst past maxChunks is trimmed straight back to depthChunks.
 //
 // Together the two also absorb clock drift: a slow sender shows up as
@@ -54,6 +68,7 @@ class AdaptiveDepth {
 
     void record(std::int32_t lateness);
     bool grow(std::size_t chunks, std::size_t buffered);
+    bool hold(std::size_t buffered);
     std::size_t shrink(std::size_t buffered);
 
   private:
@@ -68,4 +83,6 @@ class AdaptiveDepth {
     std::vector<std::int32_t> scratch_;
     std::size_t next_ = 0;
     std::size_t pulls_ = 0;
+    std::size_t lowest_ =
+        std::numeric_limits<std::size_t>::max(); // fewest chunks queued this shrink window
 };

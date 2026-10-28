@@ -30,19 +30,32 @@ bool AdaptiveDepth::grow(std::size_t chunks, std::size_t buffered) {
     return true;
 }
 
+bool AdaptiveDepth::hold(std::size_t buffered) {
+    if (buffered >= config_.minChunks) {
+        return false;
+    }
+    pulls_ = 0;
+    lowest_ = std::numeric_limits<std::size_t>::max();
+    return true;
+}
+
 std::size_t AdaptiveDepth::shrink(std::size_t buffered) {
     if (buffered > config_.maxChunks) {
         // Burst: back to the target at once, not just under the ceiling.
         const std::size_t chunks = buffered - config_.depthChunks;
         shift(static_cast<std::int32_t>(chunks));
         pulls_ = 0;
+        lowest_ = std::numeric_limits<std::size_t>::max();
         return chunks;
     }
+    lowest_ = std::min(lowest_, buffered);
     if (++pulls_ < config_.shrinkWindow) {
         return 0;
     }
+    const std::size_t lowest = lowest_;
     pulls_ = 0;
-    if (samples_.size() < config_.latenessWindow || buffered <= config_.minChunks ||
+    lowest_ = std::numeric_limits<std::size_t>::max();
+    if (samples_.size() < config_.latenessWindow || lowest <= config_.minChunks ||
         percentile() > -1) {
         return 0;
     }

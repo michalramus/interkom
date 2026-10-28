@@ -38,7 +38,7 @@ class JitterBuffer final : public Input {
         std::uint64_t duplicates = 0; // slot already played from real data
         std::uint64_t concealed = 0;  // slots filled by Plc
         std::uint64_t dropped = 0;    // inbox or store full
-        std::uint64_t grows = 0;      // cursor rewound to a late packet
+        std::uint64_t grows = 0;      // cursor rewound to a late packet, or held
         std::uint64_t shrinks = 0;    // chunks dropped to cut latency
         std::uint64_t resyncs = 0;    // timestamp jumped: new stream
         std::uint64_t depth = 0;      // chunks queued after the last pull
@@ -95,6 +95,17 @@ class JitterBuffer final : public Input {
             duplicates_.fetch_add(1, std::memory_order_relaxed);
         }
         const std::int16_t* out = nullptr;
+        if (!store_.empty() && store_.top().timestamp == cursor_ && held_ < config_.maxChunks &&
+            depth_.hold(store_.size() - 1)) {
+            // Too little left behind this chunk: play a stand-in and keep it,
+            // so the queue is one chunk deeper. Bounded, so a stream that stops
+            // still drains and goes idle.
+            ++held_;
+            grows_.fetch_add(1, std::memory_order_relaxed);
+            depthChunks_.store(store_.size(), std::memory_order_relaxed);
+            return plc_.conceal(frames);
+        }
+        held_ = 0;
         if (!store_.empty() && store_.top().timestamp == cursor_) {
             out = plc_.good(store_.top().samples.data(), frames);
             store_.pop();
@@ -145,8 +156,8 @@ class JitterBuffer final : public Input {
     // depth and flush the rest, so a slow start costs no latency.
     void anchor() {
         anchoring_ = false;
-        cursor_ = newest_ -
-                  static_cast<std::uint32_t>(config_.depthChunks * config_.framesPerChunk);
+        cursor_ =
+            newest_ - static_cast<std::uint32_t>(config_.depthChunks * config_.framesPerChunk);
         while (!store_.empty() && before(store_.top().timestamp, cursor_)) {
             store_.pop();
             flushed_.fetch_add(1, std::memory_order_relaxed);
@@ -248,10 +259,11 @@ class JitterBuffer final : public Input {
     std::array<std::int16_t, kMaxFrames> silence_{};
     std::uint32_t cursor_ = 0; // timestamp of the next chunk pull() plays
     bool started_ = false;
-    bool anchoring_ = false;      // started this drain; cursor not placed yet
-    bool stopped_ = false;        // went idle after resyncChunks missing chunks
-    std::size_t missing_ = 0;     // consecutive concealed chunks
-    std::uint32_t newest_ = 0;    // newest timestamp seen while anchoring
+    bool anchoring_ = false;   // started this drain; cursor not placed yet
+    bool stopped_ = false;     // went idle after resyncChunks missing chunks
+    std::size_t missing_ = 0;  // consecutive concealed chunks
+    std::size_t held_ = 0;     // consecutive pulls held by the depth policy
+    std::uint32_t newest_ = 0; // newest timestamp seen while anchoring
     bool playing_ = false;
     std::uint64_t played_ = 0; // bit i: slot i+1 chunks back was real audio
 
