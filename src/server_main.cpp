@@ -136,18 +136,23 @@ int main(int argc, char** argv) {
     }
 
     // The timer thread only hands the tick over; mixing runs on its own thread.
+    // A counting semaphore, so a wakeup that lands while the mixer is still
+    // busy is not merged away; the mixer then catches up every tick it missed.
     std::atomic<std::uint64_t> tick{0};
-    std::binary_semaphore wake{0};
+    std::counting_semaphore<> wake{0};
     std::atomic_bool stopping{false};
     std::thread mixing([&] {
+        std::uint64_t next = 0; // first tick not mixed yet
         while (true) {
             wake.acquire();
             if (stopping.load(std::memory_order_relaxed)) {
                 return;
             }
             const std::uint64_t now = tick.load(std::memory_order_acquire);
-            for (auto& client : clients) {
-                client->sender.push(client->minus.pull(now), kFramesPerChunk);
+            for (; next <= now; ++next) {
+                for (auto& client : clients) {
+                    client->sender.push(client->minus.pull(next), kFramesPerChunk);
+                }
             }
         }
     });
