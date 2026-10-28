@@ -4,7 +4,7 @@
 #include <iostream>
 
 Float64 request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
-                          std::uint32_t sampleRate) {
+                             std::uint32_t sampleRate) {
     AudioObjectPropertyAddress rate_address{kAudioDevicePropertyNominalSampleRate,
                                             kAudioObjectPropertyScopeGlobal,
                                             kAudioObjectPropertyElementMain};
@@ -22,8 +22,8 @@ Float64 request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
     UInt32 actual = 0;
     size = sizeof(actual);
     if (AudioObjectGetPropertyData(device, &buffer_address, 0, nullptr, &size, &actual) == noErr) {
-        std::cout << "device " << device << ": " << actual << " frames at " << deviceRate
-                  << " Hz (" << (1000.0 * actual / deviceRate) << " ms)\n";
+        std::cout << "device " << device << ": " << actual << " frames at " << deviceRate << " Hz ("
+                  << (1000.0 * actual / deviceRate) << " ms)\n";
     }
     return deviceRate;
 }

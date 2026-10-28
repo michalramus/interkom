@@ -1,8 +1,7 @@
 // CoreAudio AUHAL backend for Mic. Based on examples/rtp/coreaudio_send.cpp.
 
-#include "audio/Mic.hpp"
-
 #include "audio/CoreAudioDevice.hpp"
+#include "audio/Mic.hpp"
 
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
@@ -122,7 +121,8 @@ bool Mic::start() {
     if (device == kAudioObjectUnknown) {
         return false;
     }
-    impl_->deviceRate = request_chunk_buffer(device, impl_->config.framesPerChunk, impl_->config.sampleRate);
+    impl_->deviceRate =
+        request_chunk_buffer(device, impl_->config.framesPerChunk, impl_->config.sampleRate);
     if (!check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
                                     kAudioUnitScope_Global, kOutputElement, &device,
                                     sizeof(device)),

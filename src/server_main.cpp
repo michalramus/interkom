@@ -43,6 +43,7 @@ struct ClientConfig {
     std::uint16_t receivePort; // server receives this client on it
     std::uint16_t clientPort;  // server sends this client's mix to it
 };
+
 constexpr std::uint32_t kSampleRate = 16000;
 constexpr std::size_t kFramesPerChunk = 40; // 2.5 ms
 
@@ -137,7 +138,6 @@ int main(int argc, char** argv) {
 
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
-
 
     Mixer mixer{kFramesPerChunk};
     std::vector<std::unique_ptr<Client>> clients;

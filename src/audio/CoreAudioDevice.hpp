@@ -9,4 +9,4 @@
 // device is 120 device frames, not 40. The device may refuse and keep its own.
 // Returns the device's nominal sample rate.
 Float64 request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
-                          std::uint32_t sampleRate);
+                             std::uint32_t sampleRate);
