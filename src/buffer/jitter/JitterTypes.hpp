@@ -25,7 +25,7 @@ constexpr bool before(std::uint32_t a, std::uint32_t b) {
 
 struct JitterConfig {
     std::size_t framesPerChunk = 480; // 10 ms at 48 kHz; must match the sender
-    std::size_t depthChunks = 2;      // starting depth; fixed for StaticDepth
+    std::size_t depthChunks = 2;      // target depth; fixed for StaticDepth
     std::size_t minChunks = 1;        // AdaptiveDepth never goes below...
     std::size_t maxChunks = 10;       // ...or above these; at most 64
     std::size_t inboxChunks = 64;     // add() -> pull() handoff

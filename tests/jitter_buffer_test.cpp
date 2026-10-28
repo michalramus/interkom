@@ -177,6 +177,25 @@ void resync() {
     CHECK(jb.stats().resyncs == 1);
 }
 
+// The consumer starts late: ten packets wait before the first pull. Playout
+// anchors on the newest, so the backlog costs no latency.
+template <class Buffer>
+void startupBacklog() {
+    Buffer jb{config(2)};
+    for (int i = 0; i < 10; ++i) {
+        add(jb, 0, i);
+    }
+    CHECK(pull(jb)[0] == value(7));
+    auto stats = jb.stats();
+    CHECK(stats.depth == 2 && stats.flushed == 7 && stats.shrinks == 0);
+    for (int i = 10; i < 20; ++i) {
+        add(jb, 0, i);
+        CHECK(pull(jb)[0] == value(i - 2));
+    }
+    stats = jb.stats();
+    CHECK(stats.depth == 2 && stats.concealed == 0);
+}
+
 } // namespace
 
 int main() {
@@ -190,6 +209,8 @@ int main() {
     shrinksToMinimum();
     duplicates();
     resync();
+    startupBacklog<Static>();
+    startupBacklog<Adaptive>();
     std::cout << "jitter buffer: all passed\n";
     return 0;
 }

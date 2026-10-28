@@ -42,6 +42,7 @@ class JitterBuffer final : public Input {
         std::uint64_t shrinks = 0;    // chunks dropped to cut latency
         std::uint64_t resyncs = 0;    // timestamp jumped: new stream
         std::uint64_t depth = 0;      // chunks queued after the last pull
+        std::uint64_t flushed = 0;    // startup backlog older than the anchor
     };
 
     explicit JitterBuffer(const JitterConfig& config = {})
@@ -71,7 +72,8 @@ class JitterBuffer final : public Input {
         constexpr auto relaxed = std::memory_order_relaxed;
         return {received_.load(relaxed),  late_.load(relaxed),    duplicates_.load(relaxed),
                 concealed_.load(relaxed), dropped_.load(relaxed), grows_.load(relaxed),
-                shrinks_.load(relaxed),   resyncs_.load(relaxed), depthChunks_.load(relaxed)};
+                shrinks_.load(relaxed),   resyncs_.load(relaxed), depthChunks_.load(relaxed),
+                flushed_.load(relaxed)};
     }
 
   protected:
@@ -121,6 +123,22 @@ class JitterBuffer final : public Input {
             r = (r + 1) % inbox_.size();
             read_.store(r, std::memory_order_release);
         }
+        if (anchoring_) {
+            anchor();
+        }
+    }
+
+    // Whatever piled up before the first pull (the consumer starting late, or
+    // a resync) is not jitter. Play from the newest packet minus the target
+    // depth and flush the rest, so a slow start costs no latency.
+    void anchor() {
+        anchoring_ = false;
+        cursor_ = newest_ -
+                  static_cast<std::uint32_t>(config_.depthChunks * config_.framesPerChunk);
+        while (!store_.empty() && before(store_.top().timestamp, cursor_)) {
+            store_.pop();
+            flushed_.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     void accept(const Chunk& chunk) {
@@ -128,15 +146,26 @@ class JitterBuffer final : public Input {
         const auto frames = static_cast<std::int32_t>(config_.framesPerChunk);
         const auto resync = static_cast<std::int32_t>(config_.resyncChunks) * frames;
 
-        if (started_ && std::abs(distance(cursor_, chunk.timestamp)) > resync) {
+        if (started_ && !anchoring_ && std::abs(distance(cursor_, chunk.timestamp)) > resync) {
             restart(); // sender restarted or jumped; this is not jitter
             resyncs_.fetch_add(1, std::memory_order_relaxed);
         }
         if (!started_) {
-            // Start depthChunks behind the first packet: that is the priming.
-            cursor_ = chunk.timestamp -
-                      static_cast<std::uint32_t>(config_.depthChunks * config_.framesPerChunk);
             started_ = true;
+            anchoring_ = true;
+            newest_ = chunk.timestamp;
+        }
+        if (anchoring_) {
+            // Collect this drain's backlog; anchor() places the cursor after.
+            if (before(newest_, chunk.timestamp)) {
+                newest_ = chunk.timestamp;
+            }
+            if (!store_.push(chunk)) {
+                store_.pop(); // full: the oldest goes, it would be flushed anyway
+                flushed_.fetch_add(1, std::memory_order_relaxed);
+                store_.push(chunk);
+            }
+            return;
         }
 
         const std::int32_t ahead = distance(cursor_, chunk.timestamp);
@@ -205,6 +234,8 @@ class JitterBuffer final : public Input {
     std::array<std::int16_t, kMaxFrames> silence_{};
     std::uint32_t cursor_ = 0; // timestamp of the next chunk pull() plays
     bool started_ = false;
+    bool anchoring_ = false;      // started this drain; cursor not placed yet
+    std::uint32_t newest_ = 0;    // newest timestamp seen while anchoring
     bool playing_ = false;
     std::uint64_t played_ = 0; // bit i: slot i+1 chunks back was real audio
 
@@ -218,4 +249,5 @@ class JitterBuffer final : public Input {
     std::atomic<std::uint64_t> shrinks_{0};
     std::atomic<std::uint64_t> resyncs_{0};
     std::atomic<std::size_t> depthChunks_{0};
+    std::atomic<std::uint64_t> flushed_{0};
 };
