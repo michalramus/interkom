@@ -5,7 +5,10 @@
 //
 // The speaker's device callback is the clock: each chunk it needs ticks a
 // DeviceClock and pulls one chunk out of the jitter buffer, so playout runs on
-// the device's own clock. Everything configurable is a constexpr below.
+// the device's own clock. Addresses come from the command line, everything
+// else is a constexpr below.
+//
+//   interkom_client <server-ip> <receive-port> <send-port>
 
 #include "audio/Mic.hpp"
 #include "audio/Speaker.hpp"
@@ -15,18 +18,19 @@
 #include "rtp/RTPSender.hpp"
 
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
 
-constexpr char kServerAddress[] = "127.0.0.1";
-constexpr std::uint16_t kSendPort = 5004;    // the server's receive port for us
-constexpr std::uint16_t kReceivePort = 5006; // where the server sends our mix
 constexpr std::uint32_t kSampleRate = 48000;
 constexpr std::size_t kFramesPerChunk = 480; // 10 ms
 constexpr std::size_t kJitterChunks = 2;     // starting depth, 20 ms
@@ -37,9 +41,29 @@ void on_signal(int /*sig*/) {
     g_quit.store(true, std::memory_order_relaxed);
 }
 
+// 1..65535, the whole string, or nothing.
+std::optional<std::uint16_t> parse_port(std::string_view text) {
+    unsigned value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() || value == 0 || value > 65535) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint16_t>(value);
+}
+
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    const auto receivePort = argc == 4 ? parse_port(argv[2]) : std::nullopt;
+    const auto sendPort = argc == 4 ? parse_port(argv[3]) : std::nullopt;
+    if (!receivePort || !sendPort) {
+        std::cerr << "usage: " << argv[0] << " <server-ip> <receive-port> <send-port>\n"
+                  << "  receive-port  local port the server sends our mix to\n"
+                  << "  send-port     server port our mic is sent to\n";
+        return EXIT_FAILURE;
+    }
+    const std::string serverAddress = argv[1];
+
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
@@ -50,13 +74,13 @@ int main() {
     jitterConfig.depthChunks = kJitterChunks;
 
     JitterBuffer<> jitter{jitterConfig};
-    RTPReceiver receiver{{.address = "0.0.0.0", .port = kReceivePort, .sampleRate = kSampleRate},
+    RTPReceiver receiver{{.address = "0.0.0.0", .port = *receivePort, .sampleRate = kSampleRate},
                          [&](std::uint32_t timestamp, std::uint16_t /*sequence*/,
                              const std::int16_t* samples,
                              std::size_t frames) { jitter.add(timestamp, samples, frames); }};
 
-    RTPSender sender{{.address = kServerAddress,
-                      .port = kSendPort,
+    RTPSender sender{{.address = serverAddress,
+                      .port = *sendPort,
                       .sampleRate = kSampleRate,
                       .framesPerChunk = kFramesPerChunk}};
     Mic mic{audio,
@@ -75,8 +99,8 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    std::cout << "client: sending to " << kServerAddress << ":" << kSendPort << ", receiving on "
-              << kReceivePort << " (ctrl-c to stop)\n";
+    std::cout << "client: sending to " << serverAddress << ":" << *sendPort << ", receiving on "
+              << *receivePort << " (ctrl-c to stop)\n";
     while (!g_quit.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         const auto stats = jitter.stats();
