@@ -4,7 +4,7 @@
 #include <cstdint>
 
 struct AudioConfig {
-    std::uint32_t sampleRate = 48000;
+    std::uint32_t sampleRate = 16000;
     std::uint8_t channels = 1;
-    std::size_t framesPerChunk = 480; // 10 ms at 48 kHz
+    std::size_t framesPerChunk = 40; // 2.5 ms at 16 kHz
 };

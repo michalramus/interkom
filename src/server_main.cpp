@@ -43,9 +43,22 @@ struct ClientConfig {
     std::uint16_t receivePort; // server receives this client on it
     std::uint16_t clientPort;  // server sends this client's mix to it
 };
-constexpr std::uint32_t kSampleRate = 48000;
-constexpr std::size_t kFramesPerChunk = 480; // 10 ms
-constexpr std::size_t kJitterChunks = 2;     // starting depth, 20 ms
+constexpr std::uint32_t kSampleRate = 16000;
+constexpr std::size_t kFramesPerChunk = 40; // 2.5 ms
+
+// Jitter buffer, in chunks: start at 10 ms, adapt within 2.5..100 ms.
+constexpr JitterConfig kJitter{
+    .framesPerChunk = kFramesPerChunk,
+    .depthChunks = 4,
+    .minChunks = 1,
+    .maxChunks = 40,
+    .inboxChunks = 256,
+    .storeChunks = 256,
+    .latenessWindow = 2000, // 5 s
+    .shrinkWindow = 2000,   // 5 s
+    .resyncChunks = 200,    // 500 ms
+    .fadeChunks = 12,       // 30 ms
+};
 
 std::atomic_bool g_quit{false};
 
@@ -125,14 +138,11 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
-    JitterConfig jitterConfig;
-    jitterConfig.framesPerChunk = kFramesPerChunk;
-    jitterConfig.depthChunks = kJitterChunks;
 
     Mixer mixer{kFramesPerChunk};
     std::vector<std::unique_ptr<Client>> clients;
     for (const ClientConfig& config : configs) {
-        clients.push_back(std::make_unique<Client>(config, jitterConfig, mixer));
+        clients.push_back(std::make_unique<Client>(config, kJitter, mixer));
         mixer.addInput(&clients.back()->jitter);
     }
 
