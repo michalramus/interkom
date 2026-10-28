@@ -45,6 +45,7 @@ struct Mic::Impl {
     Callback callback;
     AudioUnit unit = nullptr;
     std::vector<std::int16_t> scratch;
+    double deviceRate = 0; // frames reach on_input at this rate
 };
 
 namespace {
@@ -53,6 +54,10 @@ namespace {
 OSStatus on_input(void* userdata, AudioUnitRenderActionFlags* flags, const AudioTimeStamp* stamp,
                   UInt32 bus, UInt32 frames, AudioBufferList* /*io*/) {
     auto* impl = static_cast<Mic::Impl*>(userdata);
+    // inNumberFrames counts device frames; AUHAL converts to our rate, so ask
+    // for that many of ours.
+    frames = static_cast<UInt32>(static_cast<double>(frames) * impl->config.sampleRate /
+                                 impl->deviceRate);
     if (frames * impl->config.channels > impl->scratch.size()) {
         return noErr; // would overflow our preallocated buffer
     }
@@ -117,7 +122,7 @@ bool Mic::start() {
     if (device == kAudioObjectUnknown) {
         return false;
     }
-    request_chunk_buffer(device, impl_->config.framesPerChunk, impl_->config.sampleRate);
+    impl_->deviceRate = request_chunk_buffer(device, impl_->config.framesPerChunk, impl_->config.sampleRate);
     if (!check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
                                     kAudioUnitScope_Global, kOutputElement, &device,
                                     sizeof(device)),

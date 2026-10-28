@@ -3,7 +3,7 @@
 #include <cmath>
 #include <iostream>
 
-void request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
+Float64 request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
                           std::uint32_t sampleRate) {
     AudioObjectPropertyAddress rate_address{kAudioDevicePropertyNominalSampleRate,
                                             kAudioObjectPropertyScopeGlobal,
@@ -25,4 +25,5 @@ void request_chunk_buffer(AudioDeviceID device, std::size_t framesPerChunk,
         std::cout << "device " << device << ": " << actual << " frames at " << deviceRate
                   << " Hz (" << (1000.0 * actual / deviceRate) << " ms)\n";
     }
+    return deviceRate;
 }
