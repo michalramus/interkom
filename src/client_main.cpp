@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
         const auto stats = jitter.stats();
         std::cout << "rx " << stats.received << ", late " << stats.late << ", concealed "
                   << stats.concealed << ", dropped " << stats.dropped << ", grows " << stats.grows
-                  << ", depth " << stats.depth << "\n";
+                  << ", shrinks " << stats.shrinks << ", depth " << stats.depth << "\n";
     }
 
     // Stop the producers before what they feed.

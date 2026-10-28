@@ -188,7 +188,8 @@ int main(int argc, char** argv) {
             const auto stats = clients[i]->jitter.stats();
             std::cout << "client " << i << ": rx " << stats.received << ", late " << stats.late
                       << ", concealed " << stats.concealed << ", dropped " << stats.dropped
-                      << ", grows " << stats.grows << ", depth " << stats.depth << "\n";
+                      << ", grows " << stats.grows << ", shrinks " << stats.shrinks << ", depth "
+                      << stats.depth << "\n";
         }
     }
 
