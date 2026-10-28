@@ -6,7 +6,12 @@
 //
 // There is no audio device, so a TimerClock paces the mix. Its thread only
 // wakes the mixing thread, which pulls every client's mix-minus once per tick.
-// Everything configurable is a constexpr below.
+// Clients come from the command line, everything else is a constexpr below.
+//
+//   interkom_server <ip:recv:send>...
+//
+// recv is the server port receiving that client's audio, send is the client's
+// port the server sends its mix to.
 
 #include "buffer/jitter/JitterBuffer.hpp"
 #include "buffer/mix/Mixer.hpp"
@@ -15,29 +20,27 @@
 #include "rtp/RTPReceiver.hpp"
 #include "rtp/RTPSender.hpp"
 
-#include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <semaphore>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 namespace {
 
 struct ClientConfig {
-    const char* address;       // where the client listens
+    std::string address;       // where the client listens
     std::uint16_t receivePort; // server receives this client on it
     std::uint16_t clientPort;  // server sends this client's mix to it
-};
-
-constexpr std::array kClients{
-    ClientConfig{"127.0.0.1", 5004, 5006},
-    ClientConfig{"127.0.0.1", 5008, 5010},
 };
 constexpr std::uint32_t kSampleRate = 48000;
 constexpr std::size_t kFramesPerChunk = 480; // 10 ms
@@ -47,6 +50,34 @@ std::atomic_bool g_quit{false};
 
 void on_signal(int /*sig*/) {
     g_quit.store(true, std::memory_order_relaxed);
+}
+
+// 1..65535, the whole string, or nothing.
+std::optional<std::uint16_t> parse_port(std::string_view text) {
+    unsigned value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() || value == 0 || value > 65535) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint16_t>(value);
+}
+
+// ip:recv:send. Split on the last two colons, so the address keeps any of its own.
+std::optional<ClientConfig> parse_client(std::string_view text) {
+    const std::size_t second = text.rfind(':');
+    if (second == std::string_view::npos || second == 0) {
+        return std::nullopt;
+    }
+    const std::size_t first = text.rfind(':', second - 1);
+    if (first == std::string_view::npos || first == 0) {
+        return std::nullopt;
+    }
+    const auto receivePort = parse_port(text.substr(first + 1, second - first - 1));
+    const auto clientPort = parse_port(text.substr(second + 1));
+    if (!receivePort || !clientPort) {
+        return std::nullopt;
+    }
+    return ClientConfig{std::string(text.substr(0, first)), *receivePort, *clientPort};
 }
 
 struct Client {
@@ -70,7 +101,26 @@ struct Client {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    std::vector<ClientConfig> configs;
+    const auto count = static_cast<std::size_t>(argc - 1);
+    bool valid = count >= 1 && count <= Mixer::kMaxInputs;
+    for (int i = 1; valid && i < argc; ++i) {
+        const auto config = parse_client(argv[i]);
+        valid = config.has_value();
+        if (valid) {
+            configs.push_back(*config);
+        }
+    }
+    if (!valid) {
+        std::cerr << "usage: " << argv[0] << " <ip:recv:send>...  (1 to " << Mixer::kMaxInputs
+                  << " clients)\n"
+                  << "  ip    client address\n"
+                  << "  recv  server port receiving this client's audio\n"
+                  << "  send  client port the mix is sent to\n";
+        return EXIT_FAILURE;
+    }
+
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
@@ -80,7 +130,7 @@ int main() {
 
     Mixer mixer{kFramesPerChunk};
     std::vector<std::unique_ptr<Client>> clients;
-    for (const ClientConfig& config : kClients) {
+    for (const ClientConfig& config : configs) {
         clients.push_back(std::make_unique<Client>(config, jitterConfig, mixer));
         mixer.addInput(&clients.back()->jitter);
     }
@@ -114,7 +164,7 @@ int main() {
     }
     clock.start();
 
-    std::cout << "server: " << kClients.size() << " clients (ctrl-c to stop)\n";
+    std::cout << "server: " << configs.size() << " clients (ctrl-c to stop)\n";
     while (!g_quit.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         for (std::size_t i = 0; i < clients.size(); ++i) {
