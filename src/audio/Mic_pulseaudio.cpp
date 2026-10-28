@@ -2,6 +2,7 @@
 // examples/pulseaudio/capture.cpp.
 
 #include "audio/Mic.hpp"
+#include "audio/PulseStream.hpp"
 
 #include <iostream>
 #include <pulse/pulseaudio.h>
@@ -81,7 +82,7 @@ bool Mic::start() {
     }
 
     const pa_sample_spec spec{PA_SAMPLE_S16LE, impl_->config.sampleRate, impl_->config.channels};
-    impl_->stream = pa_stream_new(impl_->context, "mic", &spec, nullptr);
+    impl_->stream = new_chunk_stream(impl_->context, "mic", spec, impl_->config.framesPerChunk);
     pa_stream_set_state_callback(impl_->stream, on_stream_state, impl_->mainloop);
     pa_stream_set_read_callback(impl_->stream, on_stream_read, impl_.get());
 
@@ -109,6 +110,7 @@ bool Mic::start() {
         }
         pa_threaded_mainloop_wait(impl_->mainloop);
     }
+    print_buffer_attr(impl_->stream, "mic", spec);
     pa_threaded_mainloop_unlock(impl_->mainloop);
     return true;
 }

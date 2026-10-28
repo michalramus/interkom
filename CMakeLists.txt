@@ -59,6 +59,7 @@ if(APPLE)
     )
 elseif(TARGET PkgConfig::PULSE)
     target_sources(interkom_core PRIVATE
+        src/audio/PulseStream.cpp
         src/audio/Mic_pulseaudio.cpp
         src/audio/Speaker_pulseaudio.cpp
     )

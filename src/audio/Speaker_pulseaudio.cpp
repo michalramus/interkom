@@ -1,6 +1,7 @@
 // PulseAudio threaded-mainloop backend for Speaker. Based on
 // examples/pulseaudio/playback.cpp.
 
+#include "audio/PulseStream.hpp"
 #include "audio/Speaker.hpp"
 
 #include <algorithm>
@@ -99,7 +100,7 @@ bool Speaker::start() {
 
     // Mono: the source hands out mono chunks.
     const pa_sample_spec spec{PA_SAMPLE_S16LE, impl_->config.sampleRate, 1};
-    impl_->stream = pa_stream_new(impl_->context, "speaker", &spec, nullptr);
+    impl_->stream = new_chunk_stream(impl_->context, "speaker", spec, impl_->config.framesPerChunk);
     pa_stream_set_state_callback(impl_->stream, on_stream_state, impl_->mainloop);
     pa_stream_set_write_callback(impl_->stream, on_stream_write, impl_.get());
 
@@ -131,6 +132,7 @@ bool Speaker::start() {
         }
         pa_threaded_mainloop_wait(impl_->mainloop);
     }
+    print_buffer_attr(impl_->stream, "speaker", spec);
     pa_threaded_mainloop_unlock(impl_->mainloop);
     return true;
 }
