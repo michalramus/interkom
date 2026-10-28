@@ -55,9 +55,9 @@ class StaticDepth {
 // bursts (a sound server asking for a whole period at once) drains the queue
 // by the burst size; holding grows the depth until a burst fits.
 //
-// Shrinking: every shrinkWindow pulls, if 95% of packets arrived at least one
-// chunk early and the queue never fell to minChunks in that window, drop one
-// chunk. Blind for now: it may land mid-word.
+// Shrinking: every shrinkWindow pulls, whatever the queue kept above minChunks
+// all window long (its low-water mark minus minChunks) was never needed, so it
+// is dropped at once. Blind for now: it may land mid-word.
 // A burst past maxChunks is trimmed straight back to depthChunks.
 //
 // Together the two also absorb clock drift: a slow sender shows up as

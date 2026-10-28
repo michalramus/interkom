@@ -55,12 +55,14 @@ std::size_t AdaptiveDepth::shrink(std::size_t buffered) {
     const std::size_t lowest = lowest_;
     pulls_ = 0;
     lowest_ = std::numeric_limits<std::size_t>::max();
-    if (samples_.size() < config_.latenessWindow || lowest <= config_.minChunks ||
-        percentile() > -1) {
+    if (lowest <= config_.minChunks) {
         return 0;
     }
-    shift(1);
-    return 1;
+    // The queue never fell below lowest this window, so that much above
+    // minChunks was never needed: drop it all at once.
+    const std::size_t chunks = lowest - config_.minChunks;
+    shift(static_cast<std::int32_t>(chunks));
+    return chunks;
 }
 
 std::int32_t AdaptiveDepth::percentile() {

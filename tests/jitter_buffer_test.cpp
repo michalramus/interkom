@@ -185,7 +185,9 @@ void resync() {
 // anchors on the newest, so the backlog costs no latency.
 template <class Buffer>
 void startupBacklog() {
-    Buffer jb{config(2)};
+    JitterConfig c = config(2);
+    c.shrinkWindow = 100; // keep the depth still while this looks at it
+    Buffer jb{c};
     for (int i = 0; i < 10; ++i) {
         add(jb, 0, i);
     }
@@ -198,6 +200,27 @@ void startupBacklog() {
     }
     stats = jb.stats();
     CHECK(stats.depth == 2 && stats.concealed == 0);
+}
+
+// The first window (10 pulls) trims depth 2 to minChunks 1. Then five extra
+// packets land at once and stay queued; the next window sees a low-water mark
+// of 6 and drops all 5 above minChunks in one go.
+void marginShrinksInOneWindow() {
+    Adaptive jb{config(2)};
+    int packet = 0;
+    for (; packet < 10; ++packet) {
+        add(jb, 0, packet);
+        pull(jb);
+    }
+    for (int i = 0; i < 5; ++i) {
+        add(jb, 0, packet++);
+    }
+    for (int i = 0; i < 10; ++i) {
+        add(jb, 0, packet++);
+        pull(jb);
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.shrinks == 6 && stats.depth == 1 && stats.concealed == 0);
 }
 
 // A burst past maxChunks goes back to the target depth, not to maxChunks.
@@ -326,6 +349,7 @@ int main() {
     startupBacklog<Static>();
     startupBacklog<Adaptive>();
     burstTrimsToTarget();
+    marginShrinksInOneWindow();
     idleThenReturn();
     heldStreamStillGoesIdle();
     std::cout << "jitter buffer: all passed\n";
