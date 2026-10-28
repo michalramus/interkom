@@ -287,6 +287,58 @@ void burstyConsumerHolds() {
     CHECK(stats.late == 0 && stats.concealed == 0 && stats.shrinks == 0);
 }
 
+// The startup stall seen on loopback: seven holds take depth 4 to 11. Once the
+// stream flows again, one shrink window brings it back down to minChunks.
+void stallRecoversInOneWindow() {
+    JitterConfig c = config(4);
+    c.maxChunks = 16;
+    c.inboxChunks = 32;
+    c.storeChunks = 32;
+    Adaptive jb{c};
+    int packet = 0;
+    for (; packet < 8; ++packet) {
+        add(jb, 0, packet);
+        pull(jb);
+    }
+    for (int i = 0; i < 10; ++i) { // play 3, hold 7
+        pull(jb);
+    }
+    for (int i = 0; i < 10; ++i) { // the stalled packets land at once
+        add(jb, 0, packet++);
+    }
+    add(jb, 0, packet++);
+    pull(jb);
+    CHECK(jb.stats().grows == 7 && jb.stats().depth == 11);
+    for (int i = 0; i < 10; ++i) { // one shrink window
+        add(jb, 0, packet++);
+        pull(jb);
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.depth == 1 && stats.concealed == 0 && stats.late == 0);
+}
+
+// Two holds deepen the buffer from 2 to 4. A burst past maxChunks then trims to
+// that adapted depth, not back to the starting 2.
+void burstTrimsToAdaptedDepth() {
+    JitterConfig c = config(2);
+    c.shrinkWindow = 1000;
+    Adaptive jb{c};
+    int packet = 0;
+    for (; packet < 5; ++packet) {
+        add(jb, 0, packet);
+        pull(jb);
+    }
+    for (int i = 0; i < 3; ++i) { // play, hold, hold
+        pull(jb);
+    }
+    for (int i = 0; i < 10; ++i) { // 1 queued + 10 > maxChunks 8
+        add(jb, 0, packet++);
+    }
+    pull(jb);
+    const auto stats = jb.stats();
+    CHECK(stats.grows == 2 && stats.depth == 4);
+}
+
 // The sender stops: after resyncChunks concealed chunks the buffer goes idle and
 // stops counting losses. When it comes back it anchors on the newest packet.
 void idleThenReturn() {
@@ -386,6 +438,8 @@ int main() {
     startupBacklog<Static>();
     startupBacklog<Adaptive>();
     burstTrimsToTarget();
+    burstTrimsToAdaptedDepth();
+    stallRecoversInOneWindow();
     marginShrinksInOneWindow();
     idleThenReturn();
     heldStreamStillGoesIdle();
