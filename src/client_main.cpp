@@ -115,8 +115,8 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         const auto stats = jitter.stats();
         std::cout << "rx " << stats.received << ", late " << stats.late << ", concealed "
-                  << stats.concealed << ", dropped " << stats.dropped << ", depth " << stats.depth
-                  << "\n";
+                  << stats.concealed << ", dropped " << stats.dropped << ", grows " << stats.grows
+                  << ", depth " << stats.depth << "\n";
     }
 
     // Stop the producers before what they feed.
