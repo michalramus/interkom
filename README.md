@@ -18,20 +18,23 @@ configure; an installed copy found by `find_package(uvgrtp)` is used instead.
 ## Running
 
 ```sh
-./build/debug/interkom_server
-./build/debug/interkom_client
+interkom_server <ip:recv:send>...                       # 1 to 32 clients
+interkom_client <server-ip> <receive-port> <send-port>
 ```
 
-Both print jitter buffer counters once a second; ctrl-c stops them.
+All arguments are required; anything missing or unparsable prints usage and
+exits. On the server, each client is `ip:recv:send`: `recv` is the server port
+receiving that client's audio, `send` is the client's port the mix goes to. The
+client's `receive-port` is that same `send`, and its `send-port` that `recv`.
 
-There are no flags or config files: everything is a `constexpr` at the top of
-the program.
+Two clients on loopback:
 
-- `src/server_main.cpp`: `kClients`, one `{address, receivePort, clientPort}`
-  per client.
-- `src/client_main.cpp`: `kServerAddress`, `kSendPort` (the client's
-  `receivePort` on the server) and `kReceivePort` (its `clientPort`).
+```sh
+./build/debug/interkom_server 127.0.0.1:5004:5006 127.0.0.1:5008:5010
+./build/debug/interkom_client 127.0.0.1 5006 5004
+./build/debug/interkom_client 127.0.0.1 5010 5008
+```
 
-Both default to two clients on loopback; the client as shipped is client 0.
-Running a second client on the same machine needs its ports swapped to
-5008/5010.
+Both print jitter buffer counters once a second; ctrl-c stops them. Audio and
+jitter settings stay `constexpr` at the top of `src/server_main.cpp` and
+`src/client_main.cpp`.
