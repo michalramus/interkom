@@ -44,6 +44,7 @@ class StaticDepth {
 //
 // Shrinking: every shrinkWindow pulls, if 95% of packets arrived at least one
 // chunk early, drop one chunk. Blind for now: it may land mid-word.
+// A burst past maxChunks is trimmed straight back to depthChunks.
 //
 // Together the two also absorb clock drift: a slow sender shows up as
 // lateness, a fast one as a growing early margin.

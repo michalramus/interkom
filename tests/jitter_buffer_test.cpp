@@ -196,6 +196,21 @@ void startupBacklog() {
     CHECK(stats.depth == 2 && stats.concealed == 0);
 }
 
+// A burst past maxChunks goes back to the target depth, not to maxChunks.
+void burstTrimsToTarget() {
+    Adaptive jb{config(2)};
+    for (int i = 0; i < 5; ++i) {
+        add(jb, 0, i);
+        pull(jb);
+    }
+    for (int i = 5; i < 15; ++i) { // ten at once: 12 queued > maxChunks 8
+        add(jb, 0, i);
+    }
+    CHECK(pull(jb)[0] == value(3));
+    const auto stats = jb.stats();
+    CHECK(stats.depth == 2 && stats.shrinks == 9);
+}
+
 } // namespace
 
 int main() {
@@ -211,6 +226,7 @@ int main() {
     resync();
     startupBacklog<Static>();
     startupBacklog<Adaptive>();
+    burstTrimsToTarget();
     std::cout << "jitter buffer: all passed\n";
     return 0;
 }

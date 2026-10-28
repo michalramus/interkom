@@ -32,7 +32,11 @@ bool AdaptiveDepth::grow(std::size_t chunks, std::size_t buffered) {
 
 std::size_t AdaptiveDepth::shrink(std::size_t buffered) {
     if (buffered > config_.maxChunks) {
-        return buffered - config_.maxChunks; // burst; don't wait a window
+        // Burst: back to the target at once, not just under the ceiling.
+        const std::size_t chunks = buffered - config_.depthChunks;
+        shift(static_cast<std::int32_t>(chunks));
+        pulls_ = 0;
+        return chunks;
     }
     if (++pulls_ < config_.shrinkWindow) {
         return 0;
