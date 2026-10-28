@@ -64,8 +64,30 @@ else()
     message(STATUS "interkom: no audio backend found, skipping Mic and Speaker")
 endif()
 
-find_package(uvgrtp QUIET)
-if(uvgrtp_FOUND)
+# uvgRTP: an installed copy wins, otherwise it is fetched and built in-tree
+# without Crypto++ (no SRTP), so a fresh checkout needs nothing preinstalled.
+include(FetchContent)
+set(UVGRTP_DISABLE_CRYPTO ON CACHE BOOL "" FORCE)
+set(UVGRTP_DISABLE_TESTS ON CACHE BOOL "" FORCE)
+set(UVGRTP_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
+set(UVGRTP_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+set(UVGRTP_DISABLE_WERROR ON CACHE BOOL "" FORCE)
+FetchContent_Declare(uvgrtp
+    GIT_REPOSITORY https://github.com/ultravideo/uvgRTP.git
+    GIT_TAG v4.0.1
+    GIT_SHALLOW TRUE
+    SYSTEM
+    FIND_PACKAGE_ARGS
+)
+FetchContent_MakeAvailable(uvgrtp)
+if(NOT TARGET uvgrtp::uvgrtp)
+    # In-tree build: same name as the installed package, and its own
+    # warnings are not ours to fix.
+    add_library(uvgrtp::uvgrtp ALIAS uvgrtp)
+    target_compile_options(uvgrtp PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-w>)
+endif()
+
+if(TARGET uvgrtp::uvgrtp)
     target_sources(interkom_core PRIVATE
         src/rtp/RTPSender.cpp
         src/rtp/RTPReceiver.cpp
@@ -76,14 +98,14 @@ else()
 endif()
 
 # The two programs need both the network and the audio side.
-if(uvgrtp_FOUND AND INTERKOM_AUDIO)
+if(INTERKOM_AUDIO)
     foreach(program server client)
         add_executable(interkom_${program} src/${program}_main.cpp)
         target_link_libraries(interkom_${program} PRIVATE interkom_core)
         target_compile_options(interkom_${program} PRIVATE ${INTERKOM_WARNINGS})
     endforeach()
 else()
-    message(STATUS "interkom: needs uvgRTP and an audio backend, skipping server and client")
+    message(STATUS "interkom: needs an audio backend, skipping server and client")
 endif()
 
 option(INTERKOM_BUILD_EXAMPLES "Build backend examples" ON)

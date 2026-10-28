@@ -7,8 +7,6 @@ if(PkgConfig_FOUND)
     pkg_check_modules(PULSE QUIET IMPORTED_TARGET libpulse)
 endif()
 
-find_package(uvgrtp QUIET)
-
 function(interkom_add_example name source)
     add_executable(${name} ${source})
     target_compile_options(${name} PRIVATE
@@ -59,7 +57,7 @@ else()
     message(STATUS "examples: not Apple, skipping CoreAudio examples")
 endif()
 
-if(uvgrtp_FOUND)
+if(TARGET uvgrtp::uvgrtp)
     interkom_add_example(example_uvgrtp_send rtp/uvgrtp_send.cpp)
     interkom_add_example(example_uvgrtp_recv rtp/uvgrtp_recv.cpp)
     target_link_libraries(example_uvgrtp_send PRIVATE uvgrtp::uvgrtp)
