@@ -2,6 +2,8 @@
 
 #include "rtp/RTPSender.hpp"
 
+#include "clock/ThreadPriority.hpp"
+
 #include <iostream>
 #include <uvgrtp/lib.hh>
 
@@ -77,6 +79,7 @@ void RTPSender::push(const std::int16_t* samples, std::size_t frames) {
 }
 
 void RTPSender::run() {
+    raiseThreadPriority();
     const std::size_t bytes = config_.framesPerChunk * 2;
     while (true) {
         ready_.acquire();

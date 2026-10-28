@@ -31,9 +31,12 @@ add_library(interkom_core STATIC
     src/buffer/jitter/RepeatFadePlc.cpp
     src/buffer/mix/Subtractor.cpp
     src/clock/DeviceClock.cpp
+    src/clock/ThreadPriority.cpp
     src/clock/TimerClock.cpp
 )
 target_include_directories(interkom_core PUBLIC src)
+find_package(Threads REQUIRED)
+target_link_libraries(interkom_core PUBLIC Threads::Threads)
 target_compile_options(interkom_core PRIVATE ${INTERKOM_WARNINGS})
 
 find_package(PkgConfig QUIET)

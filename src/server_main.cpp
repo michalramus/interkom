@@ -16,6 +16,7 @@
 #include "buffer/jitter/JitterBuffer.hpp"
 #include "buffer/mix/Mixer.hpp"
 #include "buffer/mix/Subtractor.hpp"
+#include "clock/ThreadPriority.hpp"
 #include "clock/TimerClock.hpp"
 #include "rtp/RTPReceiver.hpp"
 #include "rtp/RTPSender.hpp"
@@ -142,6 +143,7 @@ int main(int argc, char** argv) {
     std::counting_semaphore<> wake{0};
     std::atomic_bool stopping{false};
     std::thread mixing([&] {
+        raiseThreadPriority();
         std::uint64_t next = 0; // first tick not mixed yet
         while (true) {
             wake.acquire();

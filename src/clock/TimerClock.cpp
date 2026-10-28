@@ -1,5 +1,7 @@
 #include "clock/TimerClock.hpp"
 
+#include "clock/ThreadPriority.hpp"
+
 TimerClock::TimerClock(std::chrono::microseconds period, std::function<void(std::uint64_t)> onTick)
     : period_(period), onTick_(std::move(onTick)) {}
 
@@ -20,6 +22,7 @@ void TimerClock::stop() {
 }
 
 void TimerClock::run() {
+    raiseThreadPriority();
     auto deadline = std::chrono::steady_clock::now();
     while (!quit_.load(std::memory_order_relaxed)) {
         deadline += period_;
