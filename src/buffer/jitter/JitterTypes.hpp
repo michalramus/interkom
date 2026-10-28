@@ -32,5 +32,6 @@ struct JitterConfig {
     std::size_t storeChunks = 64;     // packets waiting for their slot
     std::size_t latenessWindow = 500; // packets in the percentile, 5 s
     std::size_t shrinkWindow = 500;   // pulls between shrink checks, 5 s
-    std::size_t resyncChunks = 50;    // further off than this is a new stream
+    std::size_t resyncChunks = 50;    // further off than this is a new stream;
+                                      // this many missing in a row: stopped
 };

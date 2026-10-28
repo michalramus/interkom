@@ -211,6 +211,34 @@ void burstTrimsToTarget() {
     CHECK(stats.depth == 2 && stats.shrinks == 9);
 }
 
+// The sender stops: after resyncChunks concealed chunks the buffer goes idle and
+// stops counting losses. When it comes back it anchors on the newest packet.
+void idleThenReturn() {
+    JitterConfig c = config(2);
+    c.resyncChunks = 5;
+    Static jb{c};
+    for (int i = 0; i < 10; ++i) {
+        add(jb, 0, i);
+        pull(jb);
+    }
+    for (int i = 0; i < 20; ++i) { // 2 queued, 5 concealed, 13 idle
+        pull(jb);
+    }
+    auto stats = jb.stats();
+    CHECK(stats.concealed == 5 && stats.idle == 13);
+
+    for (int i = 40; i < 44; ++i) { // back, after a gap
+        add(jb, 0, i);
+    }
+    CHECK(pull(jb)[0] == value(41));
+    for (int i = 44; i < 50; ++i) {
+        add(jb, 0, i);
+        CHECK(pull(jb)[0] == value(i - 2));
+    }
+    stats = jb.stats();
+    CHECK(stats.concealed == 5 && stats.idle == 13 && stats.depth == 2);
+}
+
 } // namespace
 
 int main() {
@@ -227,6 +255,7 @@ int main() {
     startupBacklog<Static>();
     startupBacklog<Adaptive>();
     burstTrimsToTarget();
+    idleThenReturn();
     std::cout << "jitter buffer: all passed\n";
     return 0;
 }

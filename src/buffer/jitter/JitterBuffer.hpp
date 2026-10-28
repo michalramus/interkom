@@ -43,6 +43,7 @@ class JitterBuffer final : public Input {
         std::uint64_t resyncs = 0;    // timestamp jumped: new stream
         std::uint64_t depth = 0;      // chunks queued after the last pull
         std::uint64_t flushed = 0;    // startup backlog older than the anchor
+        std::uint64_t idle = 0;       // silent pulls while the stream is stopped
     };
 
     explicit JitterBuffer(const JitterConfig& config = {})
@@ -73,7 +74,7 @@ class JitterBuffer final : public Input {
         return {received_.load(relaxed),  late_.load(relaxed),    duplicates_.load(relaxed),
                 concealed_.load(relaxed), dropped_.load(relaxed), grows_.load(relaxed),
                 shrinks_.load(relaxed),   resyncs_.load(relaxed), depthChunks_.load(relaxed),
-                flushed_.load(relaxed)};
+                flushed_.load(relaxed),   idle_.load(relaxed)};
     }
 
   protected:
@@ -83,6 +84,9 @@ class JitterBuffer final : public Input {
         drain();
         const std::size_t frames = config_.framesPerChunk;
         if (!started_) {
+            if (stopped_) {
+                idle_.fetch_add(1, std::memory_order_relaxed);
+            }
             return silence_.data();
         }
 
@@ -96,11 +100,19 @@ class JitterBuffer final : public Input {
             store_.pop();
             played_ = (played_ << 1U) | 1U;
             playing_ = true;
+            missing_ = 0;
         } else {
             out = plc_.conceal(frames);
             played_ <<= 1U;
             if (playing_) { // silence while priming is not a loss
                 concealed_.fetch_add(1, std::memory_order_relaxed);
+                if (++missing_ >= config_.resyncChunks) {
+                    // The sender stopped: go quiet without counting losses and
+                    // anchor afresh when it comes back.
+                    restart();
+                    stopped_ = true;
+                    return silence_.data();
+                }
             }
         }
         cursor_ += static_cast<std::uint32_t>(frames);
@@ -152,6 +164,7 @@ class JitterBuffer final : public Input {
         }
         if (!started_) {
             started_ = true;
+            stopped_ = false;
             anchoring_ = true;
             newest_ = chunk.timestamp;
         }
@@ -218,6 +231,7 @@ class JitterBuffer final : public Input {
         started_ = false;
         playing_ = false;
         played_ = 0;
+        missing_ = 0;
     }
 
     JitterConfig config_;
@@ -235,6 +249,8 @@ class JitterBuffer final : public Input {
     std::uint32_t cursor_ = 0; // timestamp of the next chunk pull() plays
     bool started_ = false;
     bool anchoring_ = false;      // started this drain; cursor not placed yet
+    bool stopped_ = false;        // went idle after resyncChunks missing chunks
+    std::size_t missing_ = 0;     // consecutive concealed chunks
     std::uint32_t newest_ = 0;    // newest timestamp seen while anchoring
     bool playing_ = false;
     std::uint64_t played_ = 0; // bit i: slot i+1 chunks back was real audio
@@ -250,4 +266,5 @@ class JitterBuffer final : public Input {
     std::atomic<std::uint64_t> resyncs_{0};
     std::atomic<std::size_t> depthChunks_{0};
     std::atomic<std::uint64_t> flushed_{0};
+    std::atomic<std::uint64_t> idle_{0};
 };
