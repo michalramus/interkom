@@ -39,8 +39,10 @@ class RTPSender {
     void push(const std::int16_t* samples, std::size_t frames);
 
   private:
-    static constexpr std::size_t kSlots = 8;
-    static constexpr std::size_t kMaxSamples = 4096;
+    // 64 packets is 160 ms of 2.5 ms chunks: room for a device that hands
+    // over a whole period at once, or a mixer catching up after a stall.
+    static constexpr std::size_t kSlots = 64;
+    static constexpr std::size_t kMaxSamples = 960;
 
     struct Slot {
         std::array<std::uint8_t, kMaxSamples * 2> payload{}; // big-endian L16
