@@ -315,6 +315,43 @@ void idleThenReturn() {
     CHECK(stats.concealed == 5 && stats.idle == 13 && stats.depth == 2);
 }
 
+// The sender stalls for 13 ticks, then resumes. The buffer holds its last
+// chunk (8 times, the cap), plays it, then holds on the empty queue, so the
+// cursor waits and nothing is lost or late: every packet plays in order, with
+// stand-ins in between.
+void underrunHolds() {
+    JitterConfig c = config(2);
+    c.shrinkWindow = 1000; // no shrinking: a drop would look like a skip
+    Adaptive jb{c};
+    int packet = 0;
+    std::int16_t expected = value(0);
+    const auto play = [&] {
+        const std::int16_t now = pull(jb)[0];
+        if (now == expected) {
+            expected = static_cast<std::int16_t>(expected + 100);
+        } else {
+            CHECK(now < expected); // a stand-in, never a skip
+        }
+    };
+    for (; packet < 10; ++packet) {
+        add(jb, 0, packet);
+        play();
+    }
+    for (int i = 0; i < 13; ++i) { // play 8, hold 9 x8, play 9, hold empty x3
+        play();
+        if (i < 9) {
+            CHECK(jb.stats().depth >= 1);
+        }
+    }
+    for (; packet < 20; ++packet) {
+        add(jb, 0, packet);
+        play();
+    }
+    const auto stats = jb.stats();
+    CHECK(stats.concealed == 0 && stats.late == 0 && stats.grows == 12);
+    CHECK(stats.depth == 1 && expected == value(19));
+}
+
 // Holding is bounded: a sender that stops still drains and goes idle.
 void heldStreamStillGoesIdle() {
     JitterConfig c = config(2);
@@ -324,11 +361,11 @@ void heldStreamStillGoesIdle() {
         add(jb, 0, i);
         pull(jb);
     }
-    for (int i = 0; i < 30; ++i) { // 1 played, 8 held, 1 played, 5 concealed
+    for (int i = 0; i < 30; ++i) { // played, 8 held, played, 4 held empty, idle
         pull(jb);
     }
     const auto stats = jb.stats();
-    CHECK(stats.grows == 8 && stats.concealed == 5 && stats.idle == 15);
+    CHECK(stats.grows == 12 && stats.concealed == 0 && stats.idle == 15);
 }
 
 } // namespace
@@ -352,6 +389,7 @@ int main() {
     marginShrinksInOneWindow();
     idleThenReturn();
     heldStreamStillGoesIdle();
+    underrunHolds();
     std::cout << "jitter buffer: all passed\n";
     return 0;
 }

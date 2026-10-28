@@ -95,11 +95,18 @@ class JitterBuffer final : public Input {
             duplicates_.fetch_add(1, std::memory_order_relaxed);
         }
         const std::int16_t* out = nullptr;
-        if (!store_.empty() && store_.top().timestamp == cursor_ && held_ < config_.maxChunks &&
-            depth_.hold(store_.size() - 1)) {
-            // Too little left behind this chunk: play a stand-in and keep it,
-            // so the queue is one chunk deeper. Bounded, so a stream that stops
-            // still drains and goes idle.
+        const bool due = !store_.empty() && store_.top().timestamp == cursor_;
+        if (held_ < config_.maxChunks && ((due && depth_.hold(store_.size() - 1)) ||
+                                          (playing_ && store_.empty() && depth_.hold(0)))) {
+            // Too little left behind this chunk, or nothing at all: play a
+            // stand-in and stay on this slot, so the queue is one chunk deeper
+            // and whatever is on its way is still on time. Bounded, so a stream
+            // that stops still drains and goes idle.
+            if (!due && ++missing_ >= config_.resyncChunks) {
+                restart();
+                stopped_ = true;
+                return silence_.data();
+            }
             ++held_;
             grows_.fetch_add(1, std::memory_order_relaxed);
             depthChunks_.store(store_.size(), std::memory_order_relaxed);
