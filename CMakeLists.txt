@@ -47,6 +47,7 @@ endif()
 set(INTERKOM_AUDIO ON)
 if(APPLE)
     target_sources(interkom_core PRIVATE
+        src/audio/CoreAudioDevice.cpp
         src/audio/Mic_coreaudio.cpp
         src/audio/Speaker_coreaudio.cpp
     )

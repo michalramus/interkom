@@ -2,6 +2,8 @@
 
 #include "audio/Mic.hpp"
 
+#include "audio/CoreAudioDevice.hpp"
+
 #include <AudioToolbox/AudioToolbox.h>
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/CoreAudio.h>
@@ -115,12 +117,7 @@ bool Mic::start() {
     if (device == kAudioObjectUnknown) {
         return false;
     }
-    // Ask for one chunk per callback; the device may refuse and keep its own.
-    AudioObjectPropertyAddress buffer_size{kAudioDevicePropertyBufferFrameSize,
-                                           kAudioObjectPropertyScopeGlobal,
-                                           kAudioObjectPropertyElementMain};
-    auto frames = static_cast<UInt32>(impl_->config.framesPerChunk);
-    AudioObjectSetPropertyData(device, &buffer_size, 0, nullptr, sizeof(frames), &frames);
+    request_chunk_buffer(device, impl_->config.framesPerChunk, impl_->config.sampleRate);
     if (!check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
                                     kAudioUnitScope_Global, kOutputElement, &device,
                                     sizeof(device)),
