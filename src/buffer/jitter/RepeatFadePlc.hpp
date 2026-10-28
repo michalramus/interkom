@@ -13,7 +13,7 @@
 // speech; it would slot in here with the same two methods.
 class RepeatFadePlc {
   public:
-    explicit RepeatFadePlc(const JitterConfig& /*config*/) {}
+    explicit RepeatFadePlc(const JitterConfig& config) : fadeChunks_(config.fadeChunks) {}
 
     // A real chunk is played: keeps a copy for the next loss and returns it, so
     // that copy is also the chunk the jitter buffer hands out.
@@ -23,8 +23,7 @@ class RepeatFadePlc {
     const std::int16_t* conceal(std::size_t frames);
 
   private:
-    static constexpr std::size_t kFadeChunks = 3;
-
+    std::size_t fadeChunks_;
     std::array<std::int16_t, kMaxFrames> last_{};
     std::array<std::int16_t, kMaxFrames> concealed_{};
     bool haveLast_ = false;

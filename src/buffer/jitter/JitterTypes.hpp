@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// Largest chunk the jitter buffer holds: 20 ms at 48 kHz.
+// Largest chunk the jitter buffer holds: 20 ms at 48 kHz, 60 ms at 16 kHz.
 constexpr std::size_t kMaxFrames = 960;
 
 // One RTP packet's worth of mono L16, already in host byte order.
@@ -13,7 +13,7 @@ struct Chunk {
     std::array<std::int16_t, kMaxFrames> samples{};
 };
 
-// RTP timestamps wrap after ~24.8 h at 48 kHz, so ordering is by signed
+// RTP timestamps wrap after ~74.6 h at 16 kHz, so ordering is by signed
 // distance, never by plain < on the raw value.
 constexpr std::int32_t distance(std::uint32_t from, std::uint32_t to) {
     return static_cast<std::int32_t>(to - from);
@@ -24,14 +24,16 @@ constexpr bool before(std::uint32_t a, std::uint32_t b) {
 }
 
 struct JitterConfig {
-    std::size_t framesPerChunk = 480; // 10 ms at 48 kHz; must match the sender
-    std::size_t depthChunks = 2;      // target depth; fixed for StaticDepth
-    std::size_t minChunks = 1;        // AdaptiveDepth never goes below...
-    std::size_t maxChunks = 10;       // ...or above these; at most 64
-    std::size_t inboxChunks = 64;     // add() -> pull() handoff
-    std::size_t storeChunks = 64;     // packets waiting for their slot
-    std::size_t latenessWindow = 500; // packets in the percentile, 5 s
-    std::size_t shrinkWindow = 500;   // pulls between shrink checks, 5 s
-    std::size_t resyncChunks = 50;    // further off than this is a new stream;
-                                      // this many missing in a row: stopped
+    // Every count below is in chunks; the times are for 2.5 ms chunks.
+    std::size_t framesPerChunk = 40;   // 2.5 ms at 16 kHz; must match the sender
+    std::size_t depthChunks = 4;       // target depth, 10 ms; fixed for StaticDepth
+    std::size_t minChunks = 1;         // AdaptiveDepth never goes below 2.5 ms...
+    std::size_t maxChunks = 40;        // ...or above 100 ms; at most 64
+    std::size_t inboxChunks = 256;     // add() -> pull() handoff, 640 ms
+    std::size_t storeChunks = 256;     // packets waiting for their slot, 640 ms
+    std::size_t latenessWindow = 2000; // packets in the percentile, 5 s
+    std::size_t shrinkWindow = 2000;   // pulls between shrink checks, 5 s
+    std::size_t resyncChunks = 200;    // further off than this (500 ms) is a new
+                                       // stream; this many missing in a row: stopped
+    std::size_t fadeChunks = 12;       // Plc fades a lost chunk out over 30 ms
 };
