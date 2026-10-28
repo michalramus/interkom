@@ -58,7 +58,8 @@ class StaticDepth {
 // Shrinking: every shrinkWindow pulls, whatever the queue kept above minChunks
 // all window long (its low-water mark minus minChunks) was never needed, so it
 // is dropped at once. Blind for now: it may land mid-word.
-// A burst past maxChunks is trimmed straight back to depthChunks.
+// A burst past maxChunks is trimmed straight back to the depth adapted to so
+// far: depthChunks, plus every grow and hold, minus every shrink.
 //
 // Together the two also absorb clock drift: a slow sender shows up as
 // lateness, a fast one as a growing early margin.
@@ -83,6 +84,7 @@ class AdaptiveDepth {
     std::vector<std::int32_t> scratch_;
     std::size_t next_ = 0;
     std::size_t pulls_ = 0;
+    std::size_t target_; // depth adapted to so far, within [minChunks, maxChunks]
     std::size_t lowest_ =
         std::numeric_limits<std::size_t>::max(); // fewest chunks queued this shrink window
 };

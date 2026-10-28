@@ -7,7 +7,8 @@ std::size_t StaticDepth::shrink(std::size_t buffered) {
     return buffered > config_.maxChunks ? buffered - config_.depthChunks : 0;
 }
 
-AdaptiveDepth::AdaptiveDepth(const JitterConfig& config) : config_(config) {
+AdaptiveDepth::AdaptiveDepth(const JitterConfig& config)
+    : config_(config), target_(config.depthChunks) {
     samples_.reserve(config_.latenessWindow);
     scratch_.reserve(config_.latenessWindow);
 }
@@ -27,6 +28,7 @@ bool AdaptiveDepth::grow(std::size_t chunks, std::size_t buffered) {
     }
     shift(-static_cast<std::int32_t>(chunks));
     pulls_ = 0;
+    target_ = std::min(target_ + chunks, config_.maxChunks);
     return true;
 }
 
@@ -36,13 +38,15 @@ bool AdaptiveDepth::hold(std::size_t buffered) {
     }
     pulls_ = 0;
     lowest_ = std::numeric_limits<std::size_t>::max();
+    target_ = std::min(target_ + 1, config_.maxChunks);
     return true;
 }
 
 std::size_t AdaptiveDepth::shrink(std::size_t buffered) {
     if (buffered > config_.maxChunks) {
-        // Burst: back to the target at once, not just under the ceiling.
-        const std::size_t chunks = buffered - config_.depthChunks;
+        // Burst: back to the depth adapted to so far, not just under the
+        // ceiling and not to the starting depth either.
+        const std::size_t chunks = buffered - target_;
         shift(static_cast<std::int32_t>(chunks));
         pulls_ = 0;
         lowest_ = std::numeric_limits<std::size_t>::max();
@@ -62,6 +66,7 @@ std::size_t AdaptiveDepth::shrink(std::size_t buffered) {
     // minChunks was never needed: drop it all at once.
     const std::size_t chunks = lowest - config_.minChunks;
     shift(static_cast<std::int32_t>(chunks));
+    target_ = std::max(target_ > chunks ? target_ - chunks : 0, config_.minChunks);
     return chunks;
 }
 
