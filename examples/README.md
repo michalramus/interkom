@@ -223,18 +223,10 @@ particular is what you need to adapt a jitter buffer automatically.
 
 ### Building these
 
-uvgRTP is not in Homebrew; build and install it, then point CMake at it:
-
-```sh
-git clone --depth 1 https://github.com/ultravideo/uvgRTP.git
-cmake -S uvgRTP -B uvgRTP/build -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=$HOME/.local
-cmake --build uvgRTP/build -j && cmake --install uvgRTP/build
-
-cmake --preset debug -DCMAKE_PREFIX_PATH=$HOME/.local
-```
-
-Without it, `find_package(uvgrtp)` fails quietly and these three are skipped.
+Nothing to install: CMake fetches uvgRTP (pinned to v4.0.1, Crypto++ disabled)
+on the first configure and builds it alongside the project. An installed uvgRTP
+is preferred when `find_package(uvgrtp)` finds one, e.g. with
+`-DCMAKE_PREFIX_PATH=$HOME/.local`.
 
 ### Running them
 

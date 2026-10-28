@@ -6,13 +6,14 @@ each of them a mix of everyone else.
 ## Building
 
 ```sh
-cmake --preset debug -DCMAKE_PREFIX_PATH=$HOME/.local   # where uvgRTP is installed
+cmake --preset debug
 cmake --build --preset debug
 ```
 
-`interkom_server` and `interkom_client` are only built when uvgRTP and an audio
-backend (CoreAudio on macOS, PulseAudio elsewhere) are found. See
-[examples/README.md](examples/README.md#building-these) for installing uvgRTP.
+uvgRTP (v4.0.1, without Crypto++) is fetched and built by CMake on the first
+configure; an installed copy found by `find_package(uvgrtp)` is used instead.
+`interkom_server` and `interkom_client` are only built when an audio backend
+(CoreAudio on macOS, PulseAudio elsewhere) is found.
 
 ## Running
 
